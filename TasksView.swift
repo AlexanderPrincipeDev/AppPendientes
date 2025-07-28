@@ -9,29 +9,40 @@ struct TasksView: View {
             ForEach(model.tasks) { task in
                 HStack {
                     Text(task.title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
                     Spacer()
                     Toggle("", isOn: Binding(
-                        get: {
-                            model.todayRecord.statuses.contains { $0.taskId == task.id }
-                        },
+                        get: { model.todayRecord.statuses.contains { $0.taskId == task.id } },
                         set: { isOn in
                             if isOn {
-                                model.activateTaskForToday(taskId: task.id)
+                                withAnimation {
+                                    model.activateTaskForToday(taskId: task.id)
+                                }
                             } else {
-                                model.deactivateTaskForToday(taskId: task.id)
+                                withAnimation {
+                                    model.deactivateTaskForToday(taskId: task.id)
+                                }
                             }
                         }
                     ))
+                    .tint(.blue)
                 }
+                .padding(.vertical, 8)
+                .listRowBackground(Color(.systemBackground))
             }
         }
         .navigationTitle("Tareas")
+        .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     showingAdd = true
                 } label: {
-                    Image(systemName: "plus")
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.blue)
                 }
             }
         }
