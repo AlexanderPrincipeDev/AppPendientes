@@ -85,6 +85,12 @@ class ChoreModel: ObservableObject {
         objectWillChange.send()
     }
 
+    func isTaskActiveToday(taskId: UUID) -> Bool {
+        let key = todayKey()
+        guard let rIndex = records.firstIndex(where: { $0.date == key }) else { return false }
+        return records[rIndex].statuses.contains { $0.taskId == taskId }
+    }
+
     func activateTaskForToday(taskId: UUID) {
         let key = todayKey()
         guard let rIndex = records.firstIndex(where: { $0.date == key }) else { return }
