@@ -1,27 +1,31 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var model = ChoreModel()
+    @StateObject private var choreModel = ChoreModel()
 
     var body: some View {
         TabView {
-            NavigationStack {
-                TodayView(model: model)
-            }
-            .tabItem { Label("Hoy", systemImage: "sun.max") }
+            TodayView()
+                .tabItem {
+                    Label("Hoy", systemImage: "sun.max.fill")
+                }
 
-            NavigationStack {
-                TasksView(model: model)
-            }
-            .tabItem { Label("Tareas", systemImage: "checklist") }
+            TasksView(model: choreModel)
+                .tabItem {
+                    Label("Tareas", systemImage: "checklist")
+                }
 
-            NavigationStack {
-                HistoryView(model: model)
-                    .navigationDestination(for: DailyRecord.self) { rec in
-                        RecordDetailView(record: rec, model: model)
-                    }
-            }
-            .tabItem { Label("Historial", systemImage: "calendar") }
+            StatsView()
+                .tabItem {
+                    Label("Estadísticas", systemImage: "chart.bar.fill")
+                }
+                
+            HistoryView()
+                .tabItem {
+                    Label("Historial", systemImage: "calendar")
+                }
         }
+        .environmentObject(choreModel)
+        .accentColor(.blue)
     }
 }

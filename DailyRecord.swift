@@ -16,4 +16,17 @@ struct DailyRecord: Identifiable, Codable, Hashable {
         self.date = date
         self.statuses = statuses
     }
+    
+    // Computed properties for UI convenience
+    var completedCount: Int {
+        statuses.filter { $0.completed }.count
+    }
+    
+    var totalCount: Int {
+        statuses.count
+    }
+    
+    var completionRate: Double {
+        totalCount > 0 ? Double(completedCount) / Double(totalCount) : 0.0
+    }
 }

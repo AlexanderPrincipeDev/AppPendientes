@@ -1,47 +1,92 @@
 import SwiftUI
 
 struct AddTaskView: View {
-    @Environment(\.dismiss) var dismiss
-    @State private var title: String = ""
-    @FocusState private var isFocused: Bool
-    var onAdd: (String) -> Void
+    @EnvironmentObject var model: ChoreModel
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var taskTitle = ""
+    @State private var selectedCategory: TaskCategory?
+    @State private var activateForToday = true
+    @FocusState private var isTextFieldFocused: Bool
+    
+    private var canSave: Bool {
+        !taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section {
-                    TextField("¿Qué tarea quieres añadir?", text: $title)
-                        .focused($isFocused)
+                    TextField("¿Qué tarea quieres añadir?", text: $taskTitle)
+                        .focused($isTextFieldFocused)
+                        .submitLabel(.done)
                         .autocapitalization(.sentences)
+                } header: {
+                    Text("Información básica")
                 }
-                .listRowBackground(Color(.systemGroupedBackground))
+                
+                Section {
+                    Picker("Categoría", selection: $selectedCategory) {
+                        Text("Sin categoría")
+                            .tag(nil as TaskCategory?)
+                        
+                        ForEach(model.categories) { category in
+                            HStack {
+                                Image(systemName: category.icon)
+                                    .foregroundStyle(category.swiftUIColor)
+                                Text(category.name)
+                            }
+                            .tag(category as TaskCategory?)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                } header: {
+                    Text("Categoría")
+                }
+                
+                Section {
+                    Toggle("Activar para hoy", isOn: $activateForToday)
+                } header: {
+                    Text("Opciones")
+                } footer: {
+                    Text("Si está activado, la tarea aparecerá en tu lista de hoy")
+                }
             }
             .navigationTitle("Nueva Tarea")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancelar", role: .cancel) {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancelar") {
                         dismiss()
                     }
                 }
                 
-                ToolbarItem(placement: .confirmationAction) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("Añadir") {
-                        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            onAdd(trimmed)
-                            dismiss()
-                        }
+                        saveTask()
                     }
-                    .fontWeight(.bold)
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .fontWeight(.semibold)
+                    .disabled(!canSave)
                 }
             }
         }
-        .presentationDetents([.height(180)])
+        .presentationDetents([.height(400)])
         .presentationDragIndicator(.visible)
         .onAppear {
-            isFocused = true
+            isTextFieldFocused = true
         }
+    }
+    
+    private func saveTask() {
+        let title = taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        
+        model.addTask(title: title, categoryId: selectedCategory?.id)
+        
+        if activateForToday, let newTask = model.tasks.last {
+            model.activateTaskForToday(taskId: newTask.id)
+        }
+        
+        dismiss()
     }
 }

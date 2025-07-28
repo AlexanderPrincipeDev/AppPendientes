@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HistoryView: View {
-    @ObservedObject var model: ChoreModel
+    @EnvironmentObject var model: ChoreModel
     
     var body: some View {
         List {
