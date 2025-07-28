@@ -69,14 +69,6 @@ class ChoreModel: ObservableObject {
         guard let rIndex = records.firstIndex(where: { $0.date == key }),
               let sIndex = records[rIndex].statuses.firstIndex(where: { $0.taskId == taskId }) else { return }
         records[rIndex].statuses[sIndex].completed.toggle()
-        
-        // Guardar la hora cuando se completa la tarea
-        if records[rIndex].statuses[sIndex].completed {
-            records[rIndex].statuses[sIndex].completedAt = Date()
-        } else {
-            records[rIndex].statuses[sIndex].completedAt = nil
-        }
-        
         saveRecords()
         objectWillChange.send()
     }
@@ -89,6 +81,24 @@ class ChoreModel: ObservableObject {
         if let rIndex = records.firstIndex(where: { $0.date == key }) {
             records[rIndex].statuses.append(TaskStatus(taskId: item.id, completed: false))
         }
+        saveRecords()
+        objectWillChange.send()
+    }
+
+    func activateTaskForToday(taskId: UUID) {
+        let key = todayKey()
+        guard let rIndex = records.firstIndex(where: { $0.date == key }) else { return }
+        if !records[rIndex].statuses.contains(where: { $0.taskId == taskId }) {
+            records[rIndex].statuses.append(TaskStatus(taskId: taskId, completed: false))
+            saveRecords()
+            objectWillChange.send()
+        }
+    }
+
+    func deactivateTaskForToday(taskId: UUID) {
+        let key = todayKey()
+        guard let rIndex = records.firstIndex(where: { $0.date == key }) else { return }
+        records[rIndex].statuses.removeAll { $0.taskId == taskId }
         saveRecords()
         objectWillChange.send()
     }

@@ -7,7 +7,22 @@ struct TasksView: View {
     var body: some View {
         List {
             ForEach(model.tasks) { task in
-                TaskRowView(task: task, model: model)
+                HStack {
+                    Text(task.title)
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: {
+                            model.todayRecord.statuses.contains { $0.taskId == task.id }
+                        },
+                        set: { isOn in
+                            if isOn {
+                                model.activateTaskForToday(taskId: task.id)
+                            } else {
+                                model.deactivateTaskForToday(taskId: task.id)
+                            }
+                        }
+                    ))
+                }
             }
         }
         .navigationTitle("Tareas")
@@ -22,23 +37,6 @@ struct TasksView: View {
         }
         .sheet(isPresented: $showingAdd) {
             AddTaskView { model.addTask(title: $0) }
-        }
-    }
-}
-
-struct TaskRowView: View {
-    let task: TaskItem
-    @ObservedObject var model: ChoreModel
-    @State private var isEnabled: Bool = false
-    
-    var body: some View {
-        HStack {
-            Text(task.title)
-            Spacer()
-            Toggle("", isOn: $isEnabled)
-                .onChange(of: isEnabled) { newValue in
-                    model.toggle(taskId: task.id)
-                }
         }
     }
 }
