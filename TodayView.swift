@@ -24,9 +24,6 @@ struct TodayView: View {
                     // Header with progress
                     TodayHeaderView()
                     
-                    // Quick add task
-                    QuickAddTaskView()
-                    
                     // Pending tasks
                     if !pendingTasks.isEmpty {
                         TaskSection(
@@ -122,50 +119,6 @@ struct TodayHeaderView: View {
         }
         .padding()
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-    }
-}
-
-// MARK: - Quick Add Task
-struct QuickAddTaskView: View {
-    @EnvironmentObject var model: ChoreModel
-    @State private var newTaskTitle = ""
-    @FocusState private var isTextFieldFocused: Bool
-    
-    var body: some View {
-        HStack {
-            TextField("Agregar tarea rápida...", text: $newTaskTitle)
-                .textFieldStyle(.roundedBorder)
-                .focused($isTextFieldFocused)
-                .onSubmit {
-                    addTask()
-                }
-            
-            Button {
-                addTask()
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title2)
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .disabled(newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-    }
-    
-    private func addTask() {
-        let title = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
-        
-        model.addTask(title: title)
-        
-        // Get the newly created task and activate it for today
-        if let newTask = model.tasks.last {
-            model.activateTaskForToday(taskId: newTask.id)
-        }
-        
-        newTaskTitle = ""
-        isTextFieldFocused = false
     }
 }
 

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var choreModel = ChoreModel()
+    @StateObject private var model = ChoreModel()
 
     var body: some View {
         TabView {
@@ -10,7 +10,7 @@ struct ContentView: View {
                     Label("Hoy", systemImage: "sun.max.fill")
                 }
 
-            TasksView(model: choreModel)
+            TasksView()
                 .tabItem {
                     Label("Tareas", systemImage: "checklist")
                 }
@@ -25,7 +25,7 @@ struct ContentView: View {
                     Label("Historial", systemImage: "calendar")
                 }
         }
-        .environmentObject(choreModel)
+        .environmentObject(model)
         .accentColor(.blue)
     }
 }

@@ -7,6 +7,8 @@ class ChoreModel: ObservableObject {
     @Published var records: [DailyRecord] = []
     @Published var gamification = GamificationData()
     @Published var categories: [TaskCategory] = []
+    
+    private let notificationService = NotificationService.shared
 
     private let tasksFile = "tasks.json"
     private let recordsFile = "records.json"
@@ -48,11 +50,8 @@ class ChoreModel: ObservableObject {
            let decoded = try? JSONDecoder().decode([TaskItem].self, from: data) {
             tasks = decoded
         } else {
-            // Asignar categorías predeterminadas a las tareas iniciales
-            let houseCategory = categories.first { $0.name == "Casa" }
-            tasks = ["Tender la cama","Barrer la casa","Lavar los platos","Tender la ropa","Lavar ropa"].map {
-                TaskItem(title: $0, categoryId: houseCategory?.id)
-            }
+            // Iniciar con lista vacía
+            tasks = []
             saveTasks()
         }
         if let data = try? Data(contentsOf: recordsURL),
@@ -63,6 +62,9 @@ class ChoreModel: ObservableObject {
            let decoded = try? JSONDecoder().decode(GamificationData.self, from: data) {
             gamification = decoded
         }
+        
+        // Limpiar tareas huérfanas después de cargar los datos
+        cleanupOrphanedTasks()
     }
 
     func saveTasks() {
@@ -102,6 +104,24 @@ class ChoreModel: ObservableObject {
         saveRecords()
         return rec
     }
+    
+    func cleanupOrphanedTasks() {
+        let key = todayKey()
+        guard let idx = records.firstIndex(where: { $0.date == key }) else { return }
+        
+        let existingTaskIds = Set(tasks.map { $0.id })
+        let originalCount = records[idx].statuses.count
+        
+        // Remover statuses de tareas que ya no existen
+        records[idx].statuses.removeAll { status in
+            !existingTaskIds.contains(status.taskId)
+        }
+        
+        // Si se removieron tareas huérfanas, guardar los cambios
+        if records[idx].statuses.count != originalCount {
+            saveRecords()
+        }
+    }
 
     func toggle(taskId: UUID) {
         let key = todayKey()
@@ -116,23 +136,100 @@ class ChoreModel: ObservableObject {
             records[rIndex].statuses[sIndex].completedAt = Date()
             // Award points for completing task
             gamification.addPoints(5)
+            
+            // Check if all tasks are now completed
+            checkForDayCompletion()
         }
         
         saveRecords()
         saveGamification()
         objectWillChange.send()
     }
+    
+    private func checkForDayCompletion() {
+        let today = todayRecord
+        let totalTasks = today.statuses.count
+        let completedTasks = today.statuses.filter { $0.completed }.count
+        
+        // Si se completaron todas las tareas y hay al menos una tarea
+        if totalTasks > 0 && completedTasks == totalTasks {
+            // Enviar notificación de felicitación
+            notificationService.sendCompletionCelebration(completedTasks: completedTasks)
+            
+            // Otorgar puntos bonus por día perfecto
+            gamification.addPoints(20)
+            saveGamification()
+        }
+    }
 
-    func addTask(title: String, categoryId: UUID? = nil) {
-        let item = TaskItem(title: title, categoryId: categoryId)
+    func addTask(title: String, categoryId: UUID? = nil, hasReminder: Bool = false, reminderTime: Date? = nil) {
+        let item = TaskItem(title: title, categoryId: categoryId, hasReminder: hasReminder, reminderTime: reminderTime)
         tasks.append(item)
         saveTasks()
+        
+        // Schedule notification if reminder is set
+        if hasReminder, let reminderTime = reminderTime {
+            notificationService.scheduleTaskReminder(for: item, at: reminderTime, repeatDaily: item.repeatDaily)
+        }
+        
         let key = todayKey()
         if let rIndex = records.firstIndex(where: { $0.date == key }) {
             records[rIndex].statuses.append(TaskStatus(taskId: item.id, completed: false, completedAt: nil))
         }
         saveRecords()
         objectWillChange.send()
+    }
+    
+    func updateTaskReminder(taskId: UUID, hasReminder: Bool, reminderTime: Date? = nil, repeatDaily: Bool = true) {
+        guard let index = tasks.firstIndex(where: { $0.id == taskId }) else { return }
+        
+        // Cancel existing notification
+        notificationService.cancelNotification(for: taskId)
+        
+        // Update task
+        tasks[index].hasReminder = hasReminder
+        tasks[index].reminderTime = reminderTime
+        tasks[index].repeatDaily = repeatDaily
+        
+        // Schedule new notification if needed
+        if hasReminder, let reminderTime = reminderTime {
+            notificationService.scheduleTaskReminder(for: tasks[index], at: reminderTime, repeatDaily: repeatDaily)
+        }
+        
+        saveTasks()
+        objectWillChange.send()
+    }
+    
+    func deleteTask(taskId: UUID) {
+        // Cancel notification
+        notificationService.cancelNotification(for: taskId)
+        
+        // Remove task
+        tasks.removeAll { $0.id == taskId }
+        
+        // Remove from all records
+        for i in 0..<records.count {
+            records[i].statuses.removeAll { $0.taskId == taskId }
+        }
+        
+        saveTasks()
+        saveRecords()
+        objectWillChange.send()
+    }
+    
+    func scheduleDailyReminder(at time: Date) {
+        let incompleteTasks = getIncompleteTasks()
+        if !incompleteTasks.isEmpty {
+            notificationService.scheduleTasksDailyReminder(tasks: incompleteTasks, at: time)
+        }
+    }
+    
+    private func getIncompleteTasks() -> [TaskItem] {
+        let todayRecord = self.todayRecord
+        return tasks.filter { task in
+            let status = todayRecord.statuses.first { $0.taskId == task.id }
+            return status?.completed != true
+        }
     }
     
     // MARK: - Category Methods
@@ -322,20 +419,6 @@ class ChoreModel: ObservableObject {
             saveRecords()
             objectWillChange.send()
         }
-    }
-    
-    func deleteTask(taskId: UUID) {
-        // Remove from tasks
-        tasks.removeAll { $0.id == taskId }
-        
-        // Remove from all records
-        for i in 0..<records.count {
-            records[i].statuses.removeAll { $0.taskId == taskId }
-        }
-        
-        saveTasks()
-        saveRecords()
-        objectWillChange.send()
     }
     
     // MARK: - Task Status Methods
