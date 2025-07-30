@@ -39,7 +39,7 @@ struct TodaySummaryCard: View {
                     .font(.headline)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(Date().dayName)
+                Text(Date().formatted(.dateTime.weekday(.wide)))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -67,7 +67,7 @@ struct CircularProgressView: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(.quaternary, lineWidth: 12)
+                .stroke(Color.gray.opacity(0.3), lineWidth: 12)
             
             Circle()
                 .trim(from: 0, to: progress)
@@ -101,7 +101,7 @@ struct WeeklyProgressChart: View {
             let date = calendar.date(byAdding: .day, value: -dayOffset, to: today) ?? today
             let dateString = date.asDateString()
             let rate = model.completionRate(for: dateString)
-            return WeekDay(day: date.shortDate, rate: rate, date: date)
+            return WeekDay(day: date.formatted(.dateTime.weekday(.abbreviated)), rate: rate, date: date)
         }.reversed()
     }
     
@@ -267,11 +267,11 @@ struct RecentActivityRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(date?.dayName ?? record.date)
+                Text(date?.formatted(.dateTime.weekday(.wide)) ?? record.date)
                     .font(.subheadline)
                     .fontWeight(.medium)
                 
-                Text(date?.shortDate ?? record.date)
+                Text(date?.formatted(.dateTime.month().day()) ?? record.date)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
