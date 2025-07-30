@@ -2,8 +2,7 @@ import SwiftUI
 
 struct TasksView: View {
     @EnvironmentObject var model: ChoreModel
-    @State private var showingAddTask = false
-    @State private var showingAddCategory = false
+    @State private var showingAdd = false
     @State private var showingDeleteAlert = false
     @State private var taskToDelete: TaskItem?
     @State private var selectedCategoryFilter: String = "Todas"
@@ -31,247 +30,129 @@ struct TasksView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header with add buttons
-            VStack(spacing: 12) {
-                HStack {
-                    Text("Gestionar Tareas")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    
-                    Spacer()
-                }
-                
-                HStack(spacing: 12) {
-                    // Add Task Button
-                    Button {
-                        showingAddTask = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 16))
-                            Text("Agregar Tarea")
-                                .font(.system(size: 14, weight: .medium))
+        ZStack {
+            VStack(spacing: 0) {
+                // Category Filter Section with enhanced design
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        // "Todas" filter
+                        FilterChip(
+                            title: "Todas",
+                            icon: "list.bullet",
+                            isSelected: selectedCategoryFilter == "Todas",
+                            color: .blue
+                        ) {
+                            selectedCategoryFilter = "Todas"
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    
-                    // Add Category Button
-                    Button {
-                        showingAddCategory = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "folder.badge.plus")
-                                .font(.system(size: 16))
-                            Text("Nueva Categoría")
-                                .font(.system(size: 14, weight: .medium))
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(.green)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    
-                    Spacer()
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.regularMaterial)
-            
-            // Category Filter Section
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    // "Todas" filter
-                    Button {
-                        selectedCategoryFilter = "Todas"
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "list.bullet")
-                                .font(.system(size: 12))
-                            Text("Todas")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(selectedCategoryFilter == "Todas" ? .blue : Color(.systemGray6))
-                        )
-                        .foregroundStyle(selectedCategoryFilter == "Todas" ? .white : .primary)
-                    }
-                    
-                    // "Sin categoría" filter
-                    Button {
-                        selectedCategoryFilter = "Sin categoría"
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "circle")
-                                .font(.system(size: 12))
-                            Text("Sin categoría")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(selectedCategoryFilter == "Sin categoría" ? .gray : Color(.systemGray6))
-                        )
-                        .foregroundStyle(selectedCategoryFilter == "Sin categoría" ? .white : .primary)
-                    }
-                    
-                    // Category filters
-                    ForEach(sortedCategories) { category in
-                        Button {
-                            selectedCategoryFilter = category.name
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: category.icon)
-                                    .font(.system(size: 12))
-                                Text(category.name)
-                                    .font(.system(size: 12, weight: .medium))
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(selectedCategoryFilter == category.name ? category.swiftUIColor : Color(.systemGray6))
-                            )
-                            .foregroundStyle(selectedCategoryFilter == category.name ? .white : .primary)
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-            }
-            .padding(.vertical, 8)
-            .background(Color(.systemGray6).opacity(0.3))
-            
-            // Task List Section
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text("Tareas")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-                    
-                    Spacer()
-                    
-                    Text("\(filteredTasks.count) tarea\(filteredTasks.count == 1 ? "" : "s")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-                
-                if filteredTasks.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "list.bullet.clipboard")
-                            .font(.system(size: 48))
-                            .foregroundStyle(.secondary)
                         
-                        VStack(spacing: 4) {
-                            Text("No hay tareas")
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                            
-                            Text("Agrega tu primera tarea usando el botón de arriba")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
+                        // "Sin categoría" filter
+                        FilterChip(
+                            title: "Sin categoría",
+                            icon: "circle",
+                            isSelected: selectedCategoryFilter == "Sin categoría",
+                            color: .gray
+                        ) {
+                            selectedCategoryFilter = "Sin categoría"
+                        }
+                        
+                        // Category filters
+                        ForEach(sortedCategories) { category in
+                            FilterChip(
+                                title: category.name,
+                                icon: category.icon,
+                                isSelected: selectedCategoryFilter == category.name,
+                                color: category.swiftUIColor
+                            ) {
+                                selectedCategoryFilter = category.name
+                            }
                         }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.vertical, 60)
-                } else {
-                    List {
+                    .padding(.horizontal, 20)
+                }
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(
+                        colors: [Color(.systemBackground), Color(.systemGray6).opacity(0.3)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                
+                // Task List with improved spacing
+                List {
+                    if filteredTasks.isEmpty {
+                        // Enhanced empty state view
+                        EmptyTasksView(selectedFilter: selectedCategoryFilter) {
+                            showingAdd = true
+                        }
+                        .frame(height: 400)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    } else {
                         ForEach(filteredTasks) { task in
-                            HStack {
-                                // Category icon
-                                if let category = model.getCategoryForTask(task) {
-                                    Image(systemName: category.icon)
-                                        .font(.system(size: 16))
-                                        .foregroundStyle(category.swiftUIColor)
-                                        .frame(width: 20)
-                                } else {
-                                    Image(systemName: "circle")
-                                        .font(.system(size: 16))
-                                        .foregroundStyle(.gray)
-                                        .frame(width: 20)
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(task.title)
-                                        .font(.body)
-                                    
-                                    if let category = model.getCategoryForTask(task) {
-                                        Text(category.name)
-                                            .font(.caption)
-                                            .foregroundStyle(category.swiftUIColor)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 2)
-                                            .background(category.swiftUIColor.opacity(0.1))
-                                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                                    }
-                                }
-                                
-                                Spacer()
-                                
-                                Toggle("Tarea", isOn: Binding(
-                                    get: {
-                                        model.todayRecord.statuses.contains { $0.taskId == task.id }
-                                    },
-                                    set: { newValue in
-                                        if newValue {
-                                            // Add task to today's record if not already there
-                                            if !model.isTaskActiveToday(task.id) {
-                                                let formatter = DateFormatter()
-                                                formatter.dateFormat = "yyyy-MM-dd"
-                                                let key = formatter.string(from: Date())
-                                                if let recordIndex = model.records.firstIndex(where: { $0.date == key }) {
-                                                    model.records[recordIndex].statuses.append(TaskStatus(taskId: task.id, completed: false))
-                                                    model.saveRecords()
-                                                }
-                                            }
-                                        } else {
-                                            // Remove task from today's record
-                                            let formatter = DateFormatter()
-                                            formatter.dateFormat = "yyyy-MM-dd"
-                                            let key = formatter.string(from: Date())
-                                            if let recordIndex = model.records.firstIndex(where: { $0.date == key }) {
-                                                model.records[recordIndex].statuses.removeAll { $0.taskId == task.id }
-                                                model.saveRecords()
-                                            }
-                                        }
-                                    }
-                                ))
-                                .labelsHidden()
-                                .tint(.blue)
-                            }
-                            .padding(.vertical, 4)
+                            EnhancedTaskRow(task: task)
+                                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                                .listRowBackground(Color.clear)
                         }
                         .onDelete(perform: deleteTask)
+                        
+                        // Extra spacing at bottom for floating button
+                        Color.clear
+                            .frame(height: 80)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
                     }
+                }
+                .listStyle(.plain)
+                .background(Color(.systemGroupedBackground))
+            }
+            
+            // Floating Action Button
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    
+                    Button {
+                        showingAdd = true
+                    } label: {
+                        ZStack {
+                            // Shadow layer
+                            Circle()
+                                .fill(.blue)
+                                .frame(width: 60, height: 60)
+                                .shadow(color: .blue.opacity(0.4), radius: 8, x: 0, y: 4)
+                                .shadow(color: .black.opacity(0.1), radius: 12, x: 0, y: 8)
+                            
+                            // Main button
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [.blue, .blue.opacity(0.8)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 56, height: 56)
+                            
+                            // Plus icon
+                            Image(systemName: "plus")
+                                .font(.system(size: 24, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .buttonStyle(FloatingButtonStyle())
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 20)
                 }
             }
         }
         .navigationTitle("Tareas")
         .navigationBarTitleDisplayMode(.large)
-        .sheet(isPresented: $showingAddTask) {
+        .sheet(isPresented: $showingAdd) {
             AddTaskView()
                 .environmentObject(model)
                 .presentationDetents([.height(350)])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showingAddCategory) {
-            AddCategoryView()
-                .environmentObject(model)
-                .presentationDetents([.height(300)])
                 .presentationDragIndicator(.visible)
         }
         .alert("Eliminar Tarea", isPresented: $showingDeleteAlert, presenting: taskToDelete) { task in
@@ -291,6 +172,349 @@ struct TasksView: View {
         for index in offsets {
             taskToDelete = filteredTasks[index]
             showingDeleteAlert = true
+        }
+    }
+}
+
+// MARK: - Floating Button Style
+struct FloatingButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Enhanced Filter Chip Component
+struct FilterChip: View {
+    let title: String
+    let icon: String
+    let isSelected: Bool
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(isSelected ? color : Color(.systemGray5))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22)
+                            .stroke(isSelected ? color.opacity(0.3) : Color.clear, lineWidth: 1)
+                    )
+                    .shadow(
+                        color: isSelected ? color.opacity(0.25) : .black.opacity(0.05),
+                        radius: isSelected ? 6 : 2,
+                        x: 0,
+                        y: isSelected ? 3 : 1
+                    )
+            )
+            .foregroundStyle(isSelected ? .white : .primary)
+            .scaleEffect(isSelected ? 1.05 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isSelected)
+    }
+}
+
+// MARK: - Enhanced Task Row Component
+struct EnhancedTaskRow: View {
+    @EnvironmentObject var model: ChoreModel
+    let task: TaskItem
+    @State private var isPressed = false
+    
+    private var category: TaskCategory? {
+        model.getCategoryForTask(task)
+    }
+    
+    private var isActiveToday: Bool {
+        model.isTaskActiveToday(task.id)
+    }
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Enhanced category icon with glow effect
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                (category?.swiftUIColor ?? Color.gray).opacity(0.15),
+                                (category?.swiftUIColor ?? Color.gray).opacity(0.05)
+                            ],
+                            center: .topLeading,
+                            startRadius: 30,
+                            endRadius: 70
+                        )
+                    )
+                    .frame(width: 52, height: 52)
+                    .overlay(
+                        Circle()
+                            .stroke((category?.swiftUIColor ?? Color.gray).opacity(0.2), lineWidth: 1)
+                    )
+                
+                Image(systemName: category?.icon ?? "circle")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(category?.swiftUIColor ?? .gray)
+            }
+            
+            // Task content with enhanced typography
+            VStack(alignment: .leading, spacing: 8) {
+                Text(task.title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                
+                HStack(spacing: 10) {
+                    if let category = category {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(category.swiftUIColor)
+                                .frame(width: 6, height: 6)
+                            
+                            Text(category.name)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(category.swiftUIColor)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(category.swiftUIColor.opacity(0.1))
+                        )
+                    }
+                    
+                    if isActiveToday {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(.green)
+                                .frame(width: 6, height: 6)
+                            
+                            Text("Activa hoy")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.green)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(.green.opacity(0.1))
+                        )
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            // Enhanced toggle with custom design
+            Toggle("Tarea", isOn: Binding(
+                get: { isActiveToday },
+                set: { newValue in
+                    if newValue {
+                        if !model.isTaskActiveToday(task.id) {
+                            let formatter = DateFormatter()
+                            formatter.dateFormat = "yyyy-MM-dd"
+                            let key = formatter.string(from: Date())
+                            if let recordIndex = model.records.firstIndex(where: { $0.date == key }) {
+                                model.records[recordIndex].statuses.append(TaskStatus(taskId: task.id, completed: false))
+                                model.saveRecords()
+                            }
+                        }
+                    } else {
+                        let formatter = DateFormatter()
+                        formatter.dateFormat = "yyyy-MM-dd"
+                        let key = formatter.string(from: Date())
+                        if let recordIndex = model.records.firstIndex(where: { $0.date == key }) {
+                            model.records[recordIndex].statuses.removeAll { $0.taskId == task.id }
+                            model.saveRecords()
+                        }
+                    }
+                }
+            ))
+            .labelsHidden()
+            .tint(.blue)
+            .scaleEffect(1.15)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(.regularMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(.quaternary, lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 4)
+        )
+        .scaleEffect(isPressed ? 0.98 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isActiveToday)
+        .onTapGesture {
+            withAnimation(.spring(response: 0.2)) {
+                isPressed = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isPressed = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Enhanced Empty Tasks View Component
+struct EmptyTasksView: View {
+    let selectedFilter: String
+    @State private var isAnimating = false
+    let onCreate: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 36) {
+            // Animated illustration
+            ZStack {
+                // Background glow
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [.blue.opacity(0.15), .purple.opacity(0.05), .clear],
+                            center: .center,
+                            startRadius: 30,
+                            endRadius: 80
+                        )
+                    )
+                    .frame(width: 120, height: 120)
+                    .scaleEffect(isAnimating ? 1.1 : 1.0)
+                    .animation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true), value: isAnimating)
+                
+                // Main icon container
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.blue.opacity(0.1), .purple.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 90, height: 90)
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                LinearGradient(
+                                    colors: [.blue.opacity(0.3), .purple.opacity(0.2)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 2
+                            )
+                    )
+                
+                Image(systemName: selectedFilter == "Todas" ? "tray" : "magnifyingglass")
+                    .font(.system(size: 36, weight: .light))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.blue, .purple],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            
+            // Enhanced text content
+            VStack(spacing: 16) {
+                Text(selectedFilter == "Todas" ? "No hay tareas creadas" : "Sin tareas en '\(selectedFilter)'")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                
+                Text(selectedFilter == "Todas"
+                     ? "Comienza organizando tu día creando tu primera tarea"
+                     : "No tienes tareas en esta categoría. Prueba cambiando el filtro o crea una nueva tarea.")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
+                    .padding(.horizontal, 8)
+            }
+            
+            // Enhanced Create Button (only for "Todas")
+            if selectedFilter == "Todas" {
+                Button {
+                    onCreate()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 20, weight: .semibold))
+                        
+                        Text("Crear mi primera tarea")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 28)
+                            .fill(
+                                LinearGradient(
+                                    colors: [.blue, .blue.opacity(0.85)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .shadow(color: .blue.opacity(0.35), radius: 12, x: 0, y: 6)
+                    )
+                }
+                .buttonStyle(.plain)
+                .scaleEffect(isAnimating ? 1.02 : 1.0)
+            }
+            
+            // Enhanced tip section
+            if selectedFilter == "Todas" {
+                VStack(spacing: 14) {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill(.yellow.opacity(0.2))
+                                .frame(width: 32, height: 32)
+                            
+                            Image(systemName: "lightbulb.fill")
+                                .foregroundStyle(.orange)
+                                .font(.system(size: 16, weight: .medium))
+                        }
+                        
+                        Text("Consejo")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.primary)
+                    }
+                    
+                    Text("Organiza tus actividades por categorías para tener un mejor control de tu productividad diaria")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(.quaternary.opacity(0.5))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(.tertiary, lineWidth: 1)
+                                )
+                        )
+                }
+            }
+        }
+        .padding(40)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.8)) {
+                isAnimating = true
+            }
         }
     }
 }

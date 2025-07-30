@@ -15,13 +15,20 @@ extension Date {
         return formatter.string(from: self)
     }
     
-    var dateKey: String {
+    var fullDateString: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "es_ES")
+        formatter.dateFormat = "EEEE, d 'de' MMMM 'de' yyyy"
+        return formatter.string(from: self).capitalized
+    }
+    
+    func asDateString() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: self)
     }
     
-    func asDateString() -> String {
+    var dateKey: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: self)
