@@ -34,12 +34,18 @@ class NotificationService: ObservableObject {
         }
     }
     
-    func scheduleTaskReminder(for task: TaskItem, at time: Date, repeatDaily: Bool = true) {
+    func scheduleTaskReminder(for task: TaskItem, at time: Date, repeatDaily: Bool = true, userName: String = "") {
         guard notificationPermissionStatus == .authorized else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "Recordatorio de tarea"
-        content.body = "No olvides: \(task.title)"
+        
+        let personalizedBody = if !userName.isEmpty {
+            "Hola \(userName), no olvides: \(task.title)"
+        } else {
+            "No olvides: \(task.title)"
+        }
+        content.body = personalizedBody
         content.sound = .default
         content.badge = 1
         
@@ -74,12 +80,18 @@ class NotificationService: ObservableObject {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
     
-    func scheduleTasksDailyReminder(tasks: [TaskItem], at time: Date) {
+    func scheduleTasksDailyReminder(tasks: [TaskItem], at time: Date, userName: String = "") {
         guard notificationPermissionStatus == .authorized else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "Lista Pendientes"
-        content.body = "Tienes \(tasks.count) tareas pendientes para hoy"
+        
+        let personalizedBody = if !userName.isEmpty {
+            "Hola \(userName), tienes \(tasks.count) tareas pendientes para hoy"
+        } else {
+            "Tienes \(tasks.count) tareas pendientes para hoy"
+        }
+        content.body = personalizedBody
         content.sound = .default
         content.badge = NSNumber(value: tasks.count)
         
@@ -104,12 +116,19 @@ class NotificationService: ObservableObject {
         }
     }
     
-    func sendCompletionCelebration(completedTasks: Int) {
+    func sendCompletionCelebration(completedTasks: Int, userName: String = "") {
         guard notificationPermissionStatus == .authorized else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "¡Felicitaciones! 🎉"
-        content.body = "¡Increíble! Has completado todas tus \(completedTasks) tareas del día. ¡Eres imparable!"
+        
+        let personalizedMessage = if !userName.isEmpty {
+            "¡Increíble \(userName)! Has completado todas tus \(completedTasks) tareas del día. ¡Eres imparable!"
+        } else {
+            "¡Increíble! Has completado todas tus \(completedTasks) tareas del día. ¡Eres imparable!"
+        }
+        
+        content.body = personalizedMessage
         content.sound = .default
         content.badge = NSNumber(value: 0)
         

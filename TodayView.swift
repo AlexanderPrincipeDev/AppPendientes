@@ -66,11 +66,25 @@ struct TodayHeaderView: View {
         model.todayRecord
     }
     
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let userName = model.userName.isEmpty ? "Usuario" : model.userName
+        
+        switch hour {
+        case 5..<12:
+            return "Buenos días, \(userName)"
+        case 12..<18:
+            return "Buenas tardes, \(userName)"
+        default:
+            return "Buenas noches, \(userName)"
+        }
+    }
+    
     var body: some View {
         VStack(spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(Date().dayName)
+                    Text(greeting)
                         .font(.title2)
                         .fontWeight(.bold)
                     

@@ -7,6 +7,8 @@ class ChoreModel: ObservableObject {
     @Published var records: [DailyRecord] = []
     @Published var gamification = GamificationData()
     @Published var categories: [TaskCategory] = []
+    @Published var userName: String = ""
+    @Published var isFirstLaunch: Bool = true
     
     private let notificationService = NotificationService.shared
 
@@ -14,6 +16,7 @@ class ChoreModel: ObservableObject {
     private let recordsFile = "records.json"
     private let gamificationFile = "gamification.json"
     private let categoriesFile = "categories.json"
+    private let userDataFile = "userData.json"
 
     init() {
         loadAll()
@@ -34,6 +37,10 @@ class ChoreModel: ObservableObject {
     private var categoriesURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(categoriesFile)
+    }
+    private var userDataURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(userDataFile)
     }
 
     func loadAll() {
@@ -62,6 +69,11 @@ class ChoreModel: ObservableObject {
            let decoded = try? JSONDecoder().decode(GamificationData.self, from: data) {
             gamification = decoded
         }
+        if let data = try? Data(contentsOf: userDataURL),
+           let decoded = try? JSONDecoder().decode(UserData.self, from: data) {
+            userName = decoded.name
+            isFirstLaunch = decoded.isFirstLaunch
+        }
         
         // Limpiar tareas huérfanas después de cargar los datos
         cleanupOrphanedTasks()
@@ -85,6 +97,12 @@ class ChoreModel: ObservableObject {
     func saveCategories() {
         if let data = try? JSONEncoder().encode(categories) {
             try? data.write(to: categoriesURL)
+        }
+    }
+    func saveUserData() {
+        let userData = UserData(name: userName, isFirstLaunch: isFirstLaunch)
+        if let data = try? JSONEncoder().encode(userData) {
+            try? data.write(to: userDataURL)
         }
     }
 
@@ -220,7 +238,7 @@ class ChoreModel: ObservableObject {
     func scheduleDailyReminder(at time: Date) {
         let incompleteTasks = getIncompleteTasks()
         if !incompleteTasks.isEmpty {
-            notificationService.scheduleTasksDailyReminder(tasks: incompleteTasks, at: time)
+            notificationService.scheduleTasksDailyReminder(tasks: incompleteTasks, at: time, userName: userName)
         }
     }
     
@@ -452,6 +470,22 @@ class ChoreModel: ObservableObject {
         }
         return record.completionRate
     }
+    
+    // MARK: - User Management
+    
+    func setUserName(_ name: String) {
+        userName = name.isEmpty ? "Usuario" : name
+        isFirstLaunch = false
+        saveUserData()
+        objectWillChange.send()
+    }
+    
+    func resetUserData() {
+        userName = "Usuario"
+        isFirstLaunch = true
+        saveUserData()
+        objectWillChange.send()
+    }
 }
 
 struct GamificationData: Codable {
@@ -493,4 +527,9 @@ struct Achievement: Codable {
             Achievement(title: "Milionario", points: 50)
         ]
     }
+}
+
+struct UserData: Codable {
+    var name: String
+    var isFirstLaunch: Bool
 }
