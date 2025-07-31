@@ -9,101 +9,79 @@ class ChoreModel: ObservableObject {
     @Published var categories: [TaskCategory] = []
     @Published var userName: String = ""
     @Published var isFirstLaunch: Bool = true
-    
-    private let notificationService = NotificationService.shared
+    @Published var lastError: String?
 
-    private let tasksFile = "tasks.json"
-    private let recordsFile = "records.json"
-    private let gamificationFile = "gamification.json"
-    private let categoriesFile = "categories.json"
-    private let userDataFile = "userData.json"
+    private let notificationService = NotificationService.shared
+    private let storage = DataStorage()
+    private let gamificationManager = GamificationManager()
+
+    private func handleError(_ error: Error, message: String) {
+        print("\(message): \(error)")
+        lastError = message
+    }
 
     init() {
         loadAll()
     }
 
-    private var tasksURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(tasksFile)
-    }
-    private var recordsURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(recordsFile)
-    }
-    private var gamificationURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(gamificationFile)
-    }
-    private var categoriesURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(categoriesFile)
-    }
-    private var userDataURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(userDataFile)
-    }
-
     func loadAll() {
-        // Load categories first
-        if let data = try? Data(contentsOf: categoriesURL),
-           let decoded = try? JSONDecoder().decode([TaskCategory].self, from: data) {
-            categories = decoded
-        } else {
+        do {
+            categories = try storage.loadCategories()
+        } catch {
             categories = TaskCategory.defaultCategories
-            saveCategories()
+            handleError(error, message: "Failed to load categories")
+            do { try storage.saveCategories(categories) } catch { handleError(error, message: "Failed to save default categories") }
         }
-        
-        if let data = try? Data(contentsOf: tasksURL),
-           let decoded = try? JSONDecoder().decode([TaskItem].self, from: data) {
-            tasks = decoded
-        } else {
-            // Iniciar con lista vacía
+
+        do {
+            tasks = try storage.loadTasks()
+        } catch {
             tasks = []
-            saveTasks()
+            handleError(error, message: "Failed to load tasks")
+            do { try storage.saveTasks(tasks) } catch { handleError(error, message: "Failed to save empty tasks") }
         }
-        if let data = try? Data(contentsOf: recordsURL),
-           let decoded = try? JSONDecoder().decode([DailyRecord].self, from: data) {
-            records = decoded
+
+        do {
+            records = try storage.loadRecords()
+        } catch {
+            records = []
+            handleError(error, message: "Failed to load records")
         }
-        if let data = try? Data(contentsOf: gamificationURL),
-           let decoded = try? JSONDecoder().decode(GamificationData.self, from: data) {
-            gamification = decoded
+
+        do {
+            gamification = try storage.loadGamification()
+        } catch {
+            gamification = GamificationData()
+            handleError(error, message: "Failed to load gamification data")
         }
-        if let data = try? Data(contentsOf: userDataURL),
-           let decoded = try? JSONDecoder().decode(UserData.self, from: data) {
-            userName = decoded.name
-            isFirstLaunch = decoded.isFirstLaunch
+
+        do {
+            let userData = try storage.loadUserData()
+            userName = userData.name
+            isFirstLaunch = userData.isFirstLaunch
+        } catch {
+            handleError(error, message: "Failed to load user data")
         }
-        
+
         // Limpiar tareas huérfanas después de cargar los datos
         cleanupOrphanedTasks()
     }
 
     func saveTasks() {
-        if let data = try? JSONEncoder().encode(tasks) {
-            try? data.write(to: tasksURL)
-        }
+        do { try storage.saveTasks(tasks) } catch { handleError(error, message: "Error saving tasks") }
     }
     func saveRecords() {
-        if let data = try? JSONEncoder().encode(records) {
-            try? data.write(to: recordsURL)
-        }
+        do { try storage.saveRecords(records) } catch { handleError(error, message: "Error saving records") }
     }
     func saveGamification() {
-        if let data = try? JSONEncoder().encode(gamification) {
-            try? data.write(to: gamificationURL)
-        }
+        do { try storage.saveGamification(gamification) } catch { handleError(error, message: "Error saving gamification") }
     }
     func saveCategories() {
-        if let data = try? JSONEncoder().encode(categories) {
-            try? data.write(to: categoriesURL)
-        }
+        do { try storage.saveCategories(categories) } catch { handleError(error, message: "Error saving categories") }
     }
     func saveUserData() {
         let userData = UserData(name: userName, isFirstLaunch: isFirstLaunch)
-        if let data = try? JSONEncoder().encode(userData) {
-            try? data.write(to: userDataURL)
-        }
+        do { try storage.saveUserData(userData) } catch { handleError(error, message: "Error saving user data") }
     }
 
     private func todayKey() -> String {
@@ -153,7 +131,7 @@ class ChoreModel: ObservableObject {
         if !wasCompleted && records[rIndex].statuses[sIndex].completed {
             records[rIndex].statuses[sIndex].completedAt = Date()
             // Award points for completing task
-            gamification.addPoints(5)
+            gamificationManager.awardTaskCompleted(&gamification)
             
             // Check if all tasks are now completed
             checkForDayCompletion()
@@ -175,18 +153,22 @@ class ChoreModel: ObservableObject {
             notificationService.sendCompletionCelebration(completedTasks: completedTasks)
             
             // Otorgar puntos bonus por día perfecto
-            gamification.addPoints(20)
+            gamificationManager.awardAllTasksCompleted(&gamification)
             saveGamification()
         }
     }
 
     func addTask(title: String, categoryId: UUID? = nil, hasReminder: Bool = false, reminderTime: Date? = nil) {
-        let item = TaskItem(title: title, categoryId: categoryId, hasReminder: hasReminder, reminderTime: reminderTime)
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let shouldSetReminder = hasReminder && reminderTime != nil
+        let item = TaskItem(title: trimmed, categoryId: categoryId, hasReminder: shouldSetReminder, reminderTime: reminderTime)
         tasks.append(item)
         saveTasks()
-        
+
         // Schedule notification if reminder is set
-        if hasReminder, let reminderTime = reminderTime {
+        if shouldSetReminder, let reminderTime = reminderTime {
             notificationService.scheduleTaskReminder(for: item, at: reminderTime, repeatDaily: item.repeatDaily)
         }
         
@@ -200,20 +182,22 @@ class ChoreModel: ObservableObject {
     
     func updateTaskReminder(taskId: UUID, hasReminder: Bool, reminderTime: Date? = nil, repeatDaily: Bool = true) {
         guard let index = tasks.firstIndex(where: { $0.id == taskId }) else { return }
-        
+
         // Cancel existing notification
         notificationService.cancelNotification(for: taskId)
-        
-        // Update task
-        tasks[index].hasReminder = hasReminder
-        tasks[index].reminderTime = reminderTime
+
         tasks[index].repeatDaily = repeatDaily
-        
-        // Schedule new notification if needed
-        if hasReminder, let reminderTime = reminderTime {
+
+        if hasReminder {
+            guard let reminderTime = reminderTime else { return }
+            tasks[index].hasReminder = true
+            tasks[index].reminderTime = reminderTime
             notificationService.scheduleTaskReminder(for: tasks[index], at: reminderTime, repeatDaily: repeatDaily)
+        } else {
+            tasks[index].hasReminder = false
+            tasks[index].reminderTime = nil
         }
-        
+
         saveTasks()
         objectWillChange.send()
     }
@@ -258,7 +242,9 @@ class ChoreModel: ObservableObject {
     }
     
     func addCategory(name: String, color: String, icon: String) {
-        let category = TaskCategory(name: name, color: color, icon: icon)
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let category = TaskCategory(name: trimmed, color: color, icon: icon)
         categories.append(category)
         saveCategories()
         objectWillChange.send()
@@ -293,110 +279,6 @@ class ChoreModel: ObservableObject {
             tasks[index].categoryId = categoryId
             saveTasks()
             objectWillChange.send()
-        }
-    }
-    
-    // MARK: - Gamification Methods
-    
-    private enum PointEvent {
-        case taskCompleted
-        case allTasksCompleted
-        case streak(days: Int)
-        
-        var points: Int {
-            switch self {
-            case .taskCompleted: return 5
-            case .allTasksCompleted: return 20
-            case .streak(let days):
-                if days >= 30 { return 50 }
-                if days >= 7 { return 25 }
-                if days >= 3 { return 10 }
-                return 0
-            }
-        }
-    }
-    
-    private func awardPoints(for event: PointEvent) {
-        gamification.totalPoints += event.points
-        // Solo actualizar streak y verificar día perfecto si es necesario
-        if case .taskCompleted = event {
-            updateStreak()
-            checkForPerfectDay()
-        }
-    }
-    
-    private func updateStreak() {
-        let key = todayKey()
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let yesterdayKey = formatter.string(from: yesterday)
-        
-        if gamification.lastTaskDate == yesterdayKey || gamification.lastTaskDate == key {
-            if gamification.lastTaskDate != key {
-                gamification.streak += 1
-                gamification.maxStreak = max(gamification.maxStreak, gamification.streak)
-                // Directamente otorgar puntos sin llamar a awardPoints para evitar recursión
-                let streakPoints = PointEvent.streak(days: gamification.streak).points
-                if streakPoints > 0 {
-                    gamification.totalPoints += streakPoints
-                }
-            }
-        } else if gamification.lastTaskDate != key {
-            gamification.streak = 1
-        }
-        
-        gamification.lastTaskDate = key
-    }
-    
-    private func checkForPerfectDay() {
-        let today = todayRecord
-        let completedCount = today.statuses.filter { $0.completed }.count
-        let totalCount = today.statuses.count
-        
-        if completedCount == totalCount && totalCount > 0 {
-            // Directamente otorgar puntos sin llamar a awardPoints para evitar recursión
-            gamification.totalPoints += PointEvent.allTasksCompleted.points
-        }
-    }
-    
-    private func checkAchievements() {
-        for i in 0..<gamification.achievements.count {
-            if !gamification.achievements[i].isUnlocked {
-                let achievement = gamification.achievements[i]
-                var shouldUnlock = false
-                
-                switch achievement.title {
-                case "Primera Tarea":
-                    shouldUnlock = true
-                case "Racha de 3":
-                    shouldUnlock = gamification.streak >= 3
-                case "Racha de 7":
-                    shouldUnlock = gamification.streak >= 7
-                case "Constante":
-                    shouldUnlock = gamification.streak >= 30
-                case "Perfeccionista":
-                    let today = todayRecord
-                    let completed = today.statuses.filter { $0.completed }.count
-                    shouldUnlock = completed == today.statuses.count && today.statuses.count > 0
-                case "Productivo":
-                    let today = todayRecord
-                    let completed = today.statuses.filter { $0.completed }.count
-                    shouldUnlock = completed >= 10
-                case "Centenario":
-                    shouldUnlock = gamification.totalPoints >= 100
-                case "Milionario":
-                    shouldUnlock = gamification.totalPoints >= 1000
-                default:
-                    break
-                }
-                
-                if shouldUnlock {
-                    gamification.achievements[i].isUnlocked = true
-                    gamification.achievements[i].unlockedDate = Date()
-                    gamification.totalPoints += achievement.points
-                }
-            }
         }
     }
     
@@ -474,7 +356,8 @@ class ChoreModel: ObservableObject {
     // MARK: - User Management
     
     func setUserName(_ name: String) {
-        userName = name.isEmpty ? "Usuario" : name
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        userName = trimmed.isEmpty ? "Usuario" : trimmed
         isFirstLaunch = false
         saveUserData()
         objectWillChange.send()
@@ -486,50 +369,4 @@ class ChoreModel: ObservableObject {
         saveUserData()
         objectWillChange.send()
     }
-}
-
-struct GamificationData: Codable {
-    var totalPoints: Int = 0
-    var level: Int = 1
-    var streak: Int = 0
-    var maxStreak: Int = 0
-    var lastTaskDate: String?
-    var achievements: [Achievement] = Achievement.defaultAchievements
-    
-    mutating func addPoints(_ pointsToAdd: Int) {
-        totalPoints += pointsToAdd
-        updateLevel()
-    }
-    
-    private mutating func updateLevel() {
-        let newLevel = (totalPoints / 100) + 1
-        if newLevel > level {
-            level = newLevel
-        }
-    }
-}
-
-struct Achievement: Codable {
-    var title: String
-    var isUnlocked: Bool = false
-    var unlockedDate: Date?
-    var points: Int
-    
-    static var defaultAchievements: [Achievement] {
-        return [
-            Achievement(title: "Primera Tarea", points: 10),
-            Achievement(title: "Racha de 3", points: 15),
-            Achievement(title: "Racha de 7", points: 25),
-            Achievement(title: "Constante", points: 50),
-            Achievement(title: "Perfeccionista", points: 100),
-            Achievement(title: "Productivo", points: 20),
-            Achievement(title: "Centenario", points: 30),
-            Achievement(title: "Milionario", points: 50)
-        ]
-    }
-}
-
-struct UserData: Codable {
-    var name: String
-    var isFirstLaunch: Bool
 }
