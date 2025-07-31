@@ -77,6 +77,12 @@ class ChoreModel: ObservableObject {
         
         // Limpiar tareas huérfanas después de cargar los datos
         cleanupOrphanedTasks()
+        
+        // Asegurar que el registro de hoy tenga todas las tareas actuales
+        syncTodayRecord()
+        
+        // Actualizar widget con los datos cargados
+        updateWidgetData()
     }
 
     func saveTasks() {
@@ -123,6 +129,35 @@ class ChoreModel: ObservableObject {
         return rec
     }
     
+    private func syncTodayRecord() {
+        let key = todayKey()
+        
+        // Buscar o crear el registro de hoy
+        if let rIndex = records.firstIndex(where: { $0.date == key }) {
+            // El registro ya existe, asegurar que tenga todas las tareas actuales
+            let currentStatusIds = Set(records[rIndex].statuses.map { $0.taskId })
+            
+            // Agregar tareas faltantes al registro de hoy
+            for task in tasks {
+                if !currentStatusIds.contains(task.id) {
+                    let newStatus = TaskStatus(taskId: task.id, completed: false, completedAt: nil)
+                    records[rIndex].statuses.append(newStatus)
+                }
+            }
+            
+            // Guardar si se agregaron nuevas tareas
+            if records[rIndex].statuses.count != currentStatusIds.count {
+                saveRecords()
+            }
+        } else {
+            // No existe registro para hoy, crearlo con todas las tareas
+            let statuses = tasks.map { TaskStatus(taskId: $0.id, completed: false) }
+            let newRecord = DailyRecord(date: key, statuses: statuses)
+            records.insert(newRecord, at: 0)
+            saveRecords()
+        }
+    }
+    
     func cleanupOrphanedTasks() {
         let key = todayKey()
         guard let idx = records.firstIndex(where: { $0.date == key }) else { return }
@@ -161,6 +196,7 @@ class ChoreModel: ObservableObject {
         
         saveRecords()
         saveGamification()
+        updateWidgetData() // Actualizar widget cuando cambie el estado
         objectWillChange.send()
     }
     
@@ -195,6 +231,7 @@ class ChoreModel: ObservableObject {
             records[rIndex].statuses.append(TaskStatus(taskId: item.id, completed: false, completedAt: nil))
         }
         saveRecords()
+        updateWidgetData() // Actualizar widget cuando se agregue una tarea
         objectWillChange.send()
     }
     
@@ -232,6 +269,7 @@ class ChoreModel: ObservableObject {
         
         saveTasks()
         saveRecords()
+        updateWidgetData() // Actualizar widget cuando se elimine una tarea
         objectWillChange.send()
     }
     
@@ -485,6 +523,27 @@ class ChoreModel: ObservableObject {
         isFirstLaunch = true
         saveUserData()
         objectWillChange.send()
+    }
+    
+    // MARK: - Widget Integration
+    
+    private func updateWidgetData() {
+        let widgetService = WidgetDataService.shared
+        let currentTasks = tasks
+        let currentRecord = todayRecord
+        
+        print("🔄 Actualizando widget - Tareas: \(currentTasks.count), Registros del día: \(currentRecord.statuses.count)")
+        
+        // Agregar más logs de depuración
+        print("🔄 Tareas actuales:")
+        for (index, task) in currentTasks.enumerated() {
+            let isCompleted = currentRecord.statuses.first(where: { $0.taskId == task.id })?.completed ?? false
+            print("   \(index + 1). \(task.title) - \(isCompleted ? "✓" : "○")")
+        }
+        
+        widgetService.updateTaskProgress(tasks: currentTasks, todayRecord: currentRecord)
+        
+        print("🔄 Widget actualizado - Forzando recarga de timeline")
     }
 }
 

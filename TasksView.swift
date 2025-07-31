@@ -2,182 +2,259 @@ import SwiftUI
 
 struct TasksView: View {
     @EnvironmentObject var model: ChoreModel
-    @State private var showingAdd = false
-    @State private var showingDeleteAlert = false
-    @State private var taskToDelete: TaskItem?
-    @State private var selectedCategoryFilter: String = "Todas"
-    @State private var searchText = ""
-    @State private var showingEditTask: TaskItem?
+    @EnvironmentObject var notificationService: NotificationService
+    @State private var selectedDate: Date? = nil
+    @State private var showingDayView = false
     
-    var filteredTasks: [TaskItem] {
-        var tasks = model.tasks
-        
-        // Filter by category
-        if selectedCategoryFilter != "Todas" {
-            if selectedCategoryFilter == "Sin categoría" {
-                tasks = tasks.filter { $0.categoryId == nil }
-            } else {
-                let selectedCategory = model.categories.first { $0.name == selectedCategoryFilter }
-                tasks = tasks.filter { $0.categoryId == selectedCategory?.id }
-            }
-        }
-        
-        // Filter by search text
-        if !searchText.isEmpty {
-            tasks = tasks.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
-        }
-        
-        return tasks.sorted { first, second in
-            // Sort by category first, then by title
-            let firstCategory = model.getCategoryForTask(first)?.name ?? "ZZZ"
-            let secondCategory = model.getCategoryForTask(second)?.name ?? "ZZZ"
-            
-            if firstCategory != secondCategory {
-                return firstCategory < secondCategory
-            }
-            return first.title < second.title
-        }
-    }
-    
-    private var sortedCategories: [TaskCategory] {
-        let priorityCategories = ["Casa", "Trabajo", "Personal", "Salud"]
-        let priorityItems = model.categories.filter { priorityCategories.contains($0.name) }
-        let otherItems = model.categories.filter { !priorityCategories.contains($0.name) }
-        return priorityItems + otherItems
-    }
-    
-    private var taskCount: (total: Int, byCategory: [String: Int]) {
-        var byCategory: [String: Int] = [:]
-        
-        // Count all tasks
-        byCategory["Todas"] = model.tasks.count
-        
-        // Count uncategorized tasks
-        let uncategorizedCount = model.tasks.filter { $0.categoryId == nil }.count
-        if uncategorizedCount > 0 {
-            byCategory["Sin categoría"] = uncategorizedCount
-        }
-        
-        // Count tasks by category
-        for category in model.categories {
-            let count = model.tasks.filter { $0.categoryId == category.id }.count
-            if count > 0 {
-                byCategory[category.name] = count
-            }
-        }
-        
-        return (model.tasks.count, byCategory)
-    }
-
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Header with Stats Summary
-                TasksHeaderSection(
-                    totalTasks: taskCount.total,
-                    filteredCount: filteredTasks.count,
-                    selectedFilter: selectedCategoryFilter,
-                    categoryCount: model.categories.count
-                )
+                // Calendar View para seleccionar fechas
+                TaskCalendarView(selectedDate: $selectedDate, showingDayView: $showingDayView)
                 
-                // Search Bar
-                if !model.tasks.isEmpty {
-                    SearchBarSection(searchText: $searchText)
-                }
-                
-                // Category Filter Pills
-                if !model.categories.isEmpty {
-                    CategoryFilterSection(
-                        selectedFilter: $selectedCategoryFilter,
-                        categories: sortedCategories,
-                        taskCounts: taskCount.byCategory
-                    )
-                }
-                
-                // Main Content
-                if model.tasks.isEmpty {
-                    EmptyAllTasksView {
-                        showingAdd = true
-                    }
-                } else if filteredTasks.isEmpty {
-                    EmptyFilteredTasksView(
-                        filter: selectedCategoryFilter,
-                        searchText: searchText
-                    ) {
-                        if !searchText.isEmpty {
-                            searchText = ""
-                        } else {
-                            selectedCategoryFilter = "Todas"
-                        }
-                    }
-                } else {
-                    TasksListSection(
-                        tasks: filteredTasks,
-                        onEdit: { task in showingEditTask = task },
-                        onDelete: deleteTask
-                    )
-                }
-                
-                Spacer(minLength: 0)
+                // Sección de resumen rápido
+                TasksSummarySection()
+                    .padding()
             }
             .navigationTitle("Tareas")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingAdd = true }) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.blue)
-                    }
+            .sheet(isPresented: $showingDayView) {
+                selectedDate = nil
+            } content: {
+                if let selectedDate = selectedDate {
+                    DayTasksView(date: selectedDate)
+                        .environmentObject(model)
+                        .environmentObject(notificationService)
                 }
             }
-            .overlay(alignment: .bottomTrailing) {
-                // Floating Action Button
-                if !model.tasks.isEmpty {
-                    FloatingActionButton {
-                        showingAdd = true
-                    }
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 20)
+            .onChange(of: selectedDate) { oldValue, newValue in
+                if newValue != nil && !showingDayView {
+                    showingDayView = true
                 }
-            }
-            .sheet(isPresented: $showingAdd) {
-                AddTaskView()
-                    .environmentObject(model)
-            }
-            .sheet(item: $showingEditTask) { task in
-                EditTaskView(task: task)
-                    .environmentObject(model)
-            }
-            .alert("Eliminar Tarea", isPresented: $showingDeleteAlert) {
-                Button("Eliminar", role: .destructive) {
-                    if let task = taskToDelete {
-                        model.deleteTask(taskId: task.id)
-                        taskToDelete = nil
-                    }
-                }
-                Button("Cancelar", role: .cancel) {
-                    taskToDelete = nil
-                }
-            } message: {
-                Text("¿Estás seguro de que quieres eliminar esta tarea? Esta acción no se puede deshacer.")
             }
         }
     }
+}
+
+// MARK: - Task Calendar View
+struct TaskCalendarView: View {
+    @EnvironmentObject var model: ChoreModel
+    @Binding var selectedDate: Date?
+    @Binding var showingDayView: Bool
+    @State private var currentMonth = Date()
     
-    private func deleteTask(at offsets: IndexSet) {
-        guard let index = offsets.first else { return }
-        taskToDelete = filteredTasks[index]
-        showingDeleteAlert = true
+    private let calendar = Calendar.current
+    
+    private var monthYearFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter
+    }
+    
+    private var daysInMonth: [Date] {
+        guard let monthInterval = calendar.dateInterval(of: .month, for: currentMonth) else {
+            return []
+        }
+        
+        let firstDayOfMonth = monthInterval.start
+        let firstDayWeekday = calendar.component(.weekday, from: firstDayOfMonth)
+        let daysToSubtract = (firstDayWeekday - 1) % 7
+        
+        guard let startDate = calendar.date(byAdding: .day, value: -daysToSubtract, to: firstDayOfMonth) else {
+            return []
+        }
+        
+        var days: [Date] = []
+        for i in 0..<42 { // 6 weeks × 7 days
+            if let day = calendar.date(byAdding: .day, value: i, to: startDate) {
+                days.append(day)
+            }
+        }
+        return days
+    }
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Header con título
+            HStack {
+                Text("Selecciona una fecha para crear tareas")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+            }
+            .padding(.horizontal)
+            
+            // Month Navigation
+            HStack {
+                Button(action: previousMonth) {
+                    Image(systemName: "chevron.left")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                }
+                
+                Spacer()
+                
+                Text(monthYearFormatter.string(from: currentMonth))
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Button(action: nextMonth) {
+                    Image(systemName: "chevron.right")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                }
+            }
+            .padding(.horizontal)
+            
+            // Weekday Headers
+            HStack(spacing: 0) {
+                ForEach(["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"], id: \.self) { weekday in
+                    Text(weekday)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal)
+            
+            // Calendar Grid
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 2) {
+                ForEach(daysInMonth, id: \.self) { date in
+                    TaskCalendarDayView(
+                        date: date,
+                        currentMonth: currentMonth,
+                        selectedDate: $selectedDate,
+                        showingDayView: $showingDayView
+                    )
+                    .environmentObject(model)
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding(.vertical)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
+    }
+    
+    private func previousMonth() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            currentMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
+        }
+    }
+    
+    private func nextMonth() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            currentMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
+        }
     }
 }
 
-// MARK: - Tasks Header Section
-struct TasksHeaderSection: View {
-    let totalTasks: Int
-    let filteredCount: Int
-    let selectedFilter: String
-    let categoryCount: Int
+// MARK: - Task Calendar Day View
+struct TaskCalendarDayView: View {
+    @EnvironmentObject var model: ChoreModel
+    let date: Date
+    let currentMonth: Date
+    @Binding var selectedDate: Date?
+    @Binding var showingDayView: Bool
+    
+    private let calendar = Calendar.current
+    
+    private var isInCurrentMonth: Bool {
+        calendar.isDate(date, equalTo: currentMonth, toGranularity: .month)
+    }
+    
+    private var isToday: Bool {
+        calendar.isDateInToday(date)
+    }
+    
+    private var tasksForDate: [TaskItem] {
+        model.tasks.filter { task in
+            if task.taskType == .specific, let specificDate = task.specificDate {
+                return calendar.isDate(specificDate, inSameDayAs: date)
+            }
+            return false
+        }
+    }
+    
+    private var hasTasksForDate: Bool {
+        !tasksForDate.isEmpty
+    }
+    
+    private var textColor: Color {
+        if !isInCurrentMonth {
+            return .secondary.opacity(0.5)
+        } else if isToday {
+            return .white
+        } else {
+            return .primary
+        }
+    }
+    
+    private var backgroundColor: Color {
+        if isToday {
+            return .blue
+        } else if hasTasksForDate {
+            return .green.opacity(0.2)
+        } else {
+            return .clear
+        }
+    }
+    
+    var body: some View {
+        Button(action: dayTapped) {
+            VStack(spacing: 4) {
+                Text("\(calendar.component(.day, from: date))")
+                    .font(.system(size: 16, weight: isToday ? .bold : .medium))
+                    .foregroundStyle(textColor)
+                
+                // Indicador de tareas
+                if hasTasksForDate {
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 6, height: 6)
+                } else {
+                    Circle()
+                        .fill(.clear)
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .frame(height: 44)
+            .frame(maxWidth: .infinity)
+            .background(backgroundColor, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isToday ? .clear : .clear, lineWidth: 1)
+            )
+        }
+        .disabled(!isInCurrentMonth)
+        .buttonStyle(.plain)
+    }
+    
+    private func dayTapped() {
+        guard isInCurrentMonth else { return }
+        selectedDate = date
+    }
+}
+
+// MARK: - Tasks Summary Section
+struct TasksSummarySection: View {
+    @EnvironmentObject var model: ChoreModel
+    
+    private var totalTasks: Int {
+        model.tasks.count
+    }
+    
+    private var activeTasks: Int {
+        model.tasks.filter { $0.taskType == .daily }.count
+    }
+    
+    private var totalCategories: Int {
+        model.categories.count
+    }
     
     var body: some View {
         VStack(spacing: 16) {
@@ -191,16 +268,16 @@ struct TasksHeaderSection: View {
                 )
                 
                 HeaderStatCard(
-                    title: selectedFilter == "Todas" ? "Activas" : "Filtradas",
-                    value: "\(filteredCount)",
-                    subtitle: selectedFilter == "Todas" ? "visibles" : "coinciden",
+                    title: "Diarias",
+                    value: "\(activeTasks)",
+                    subtitle: "activas",
                     color: .green,
-                    icon: selectedFilter == "Todas" ? "eye" : "line.3.horizontal.decrease.circle"
+                    icon: "repeat"
                 )
                 
                 HeaderStatCard(
                     title: "Categorías",
-                    value: "\(categoryCount)",
+                    value: "\(totalCategories)",
                     subtitle: "creadas",
                     color: .purple,
                     icon: "tag.fill"
@@ -257,520 +334,366 @@ struct HeaderStatCard: View {
     }
 }
 
-// MARK: - Search Bar Section
-struct SearchBarSection: View {
-    @Binding var searchText: String
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                
-                TextField("Buscar tareas...", text: $searchText)
-                    .textFieldStyle(.plain)
-                
-                if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        }
-        .padding(.horizontal)
-        .padding(.bottom, 8)
-    }
-}
-
-// MARK: - Category Filter Section
-struct CategoryFilterSection: View {
-    @Binding var selectedFilter: String
-    let categories: [TaskCategory]
-    let taskCounts: [String: Int]
-    
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                // All tasks filter
-                CategoryFilterChip(
-                    title: "Todas",
-                    icon: "list.bullet",
-                    count: taskCounts["Todas"] ?? 0,
-                    isSelected: selectedFilter == "Todas",
-                    color: .blue
-                ) {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        selectedFilter = "Todas"
-                    }
-                }
-                
-                // Uncategorized filter
-                if let uncategorizedCount = taskCounts["Sin categoría"], uncategorizedCount > 0 {
-                    CategoryFilterChip(
-                        title: "Sin categoría",
-                        icon: "circle",
-                        count: uncategorizedCount,
-                        isSelected: selectedFilter == "Sin categoría",
-                        color: .gray
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            selectedFilter = "Sin categoría"
-                        }
-                    }
-                }
-                
-                // Category filters
-                ForEach(categories) { category in
-                    if let count = taskCounts[category.name], count > 0 {
-                        CategoryFilterChip(
-                            title: category.name,
-                            icon: category.icon,
-                            count: count,
-                            isSelected: selectedFilter == category.name,
-                            color: category.swiftUIColor
-                        ) {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                selectedFilter = category.name
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal)
-        }
-        .padding(.bottom)
-    }
-}
-
-// MARK: - Category Filter Chip
-struct CategoryFilterChip: View {
-    let title: String
-    let icon: String
-    let count: Int
-    let isSelected: Bool
-    let color: Color
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.caption)
-                
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                Text("\(count)")
-                    .font(.caption)
-                    .fontWeight(.bold)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        isSelected ? Color.white.opacity(0.9) : color.opacity(0.2),
-                        in: Capsule()
-                    )
-                    .foregroundStyle(isSelected ? color : .primary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                isSelected ?
-                    LinearGradient(colors: [color, color.opacity(0.8)], startPoint: .leading, endPoint: .trailing) :
-                    LinearGradient(colors: [Color.clear], startPoint: .leading, endPoint: .trailing),
-                in: Capsule()
-            )
-            .overlay(
-                Capsule()
-                    .stroke(color.opacity(0.3), lineWidth: isSelected ? 0 : 1)
-            )
-            .foregroundStyle(isSelected ? .white : .primary)
-            .scaleEffect(isSelected ? 1.05 : 1.0)
-            .animation(.easeInOut(duration: 0.3), value: isSelected)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Tasks List Section
-struct TasksListSection: View {
-    let tasks: [TaskItem]
-    let onEdit: (TaskItem) -> Void
-    let onDelete: (IndexSet) -> Void
-    
-    var body: some View {
-        List {
-            ForEach(tasks) { task in
-                ModernTaskRow(task: task) {
-                    onEdit(task)
-                }
-                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            }
-            .onDelete(perform: onDelete)
-            
-            // Extra space for floating button
-            Color.clear
-                .frame(height: 100)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-    }
-}
-
-// MARK: - Modern Task Row
-struct ModernTaskRow: View {
+// MARK: - Add Task For Date View
+struct AddTaskForDateView: View {
     @EnvironmentObject var model: ChoreModel
-    let task: TaskItem
-    let onEdit: () -> Void
-    
-    private var category: TaskCategory? {
-        model.getCategoryForTask(task)
-    }
-    
-    private var isCompletedToday: Bool {
-        model.isTaskCompletedToday(task.id)
-    }
-    
-    private var isActiveToday: Bool {
-        model.isTaskActiveToday(task.id)
-    }
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            // Category color indicator
-            RoundedRectangle(cornerRadius: 3)
-                .fill(category?.swiftUIColor ?? .gray)
-                .frame(width: 4, height: 50)
-            
-            // Task content
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(task.title)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                    
-                    Spacer()
-                    
-                    // Today completion status
-                    if isCompletedToday {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title3)
-                            .foregroundStyle(.green)
-                    }
-                }
-                
-                HStack(spacing: 8) {
-                    if let category = category {
-                        Image(systemName: category.icon)
-                            .font(.caption)
-                            .foregroundStyle(category.swiftUIColor)
-                        
-                        Text(category.name)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    if isActiveToday {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(.green)
-                                .frame(width: 6, height: 6)
-                            
-                            Text("Activa hoy")
-                                .font(.caption2)
-                                .foregroundStyle(.green)
-                                .fontWeight(.medium)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(.green.opacity(0.1), in: Capsule())
-                    }
-                    
-                    Spacer()
-                }
-            }
-            
-            // Toggle para activar/desactivar la tarea para hoy
-            Toggle("Activa para hoy", isOn: Binding(
-                get: { isActiveToday },
-                set: { newValue in
-                    if newValue {
-                        // Activar tarea para hoy
-                        if !model.isTaskActiveToday(task.id) {
-                            let formatter = DateFormatter()
-                            formatter.dateFormat = "yyyy-MM-dd"
-                            let key = formatter.string(from: Date())
-                            
-                            // Crear o encontrar el record de hoy
-                            if let recordIndex = model.records.firstIndex(where: { $0.date == key }) {
-                                // El record existe, agregar la tarea
-                                model.records[recordIndex].statuses.append(TaskStatus(taskId: task.id, completed: false))
-                            } else {
-                                // Crear nuevo record para hoy
-                                let newRecord = DailyRecord(
-                                    date: key,
-                                    statuses: [TaskStatus(taskId: task.id, completed: false)]
-                                )
-                                model.records.append(newRecord)
-                            }
-                            model.saveRecords()
-                        }
-                    } else {
-                        // Desactivar tarea para hoy
-                        let formatter = DateFormatter()
-                        formatter.dateFormat = "yyyy-MM-dd"
-                        let key = formatter.string(from: Date())
-                        
-                        if let recordIndex = model.records.firstIndex(where: { $0.date == key }) {
-                            model.records[recordIndex].statuses.removeAll { $0.taskId == task.id }
-                            model.saveRecords()
-                        }
-                    }
-                }
-            ))
-            .labelsHidden()
-            .tint(.blue)
-            .scaleEffect(1.1)
-            
-            // Edit button
-            Button(action: onEdit) {
-                Image(systemName: "pencil.circle")
-                    .font(.title2)
-                    .foregroundStyle(.blue)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    isCompletedToday ? 
-                        .green.opacity(0.3) : 
-                        isActiveToday ? .blue.opacity(0.3) : .clear,
-                    lineWidth: 2
-                )
-        )
-        .padding(.vertical, 2)
-        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
-    }
-}
-
-// MARK: - Empty States
-struct EmptyAllTasksView: View {
-    let onAddTask: () -> Void
-    
-    var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            
-            VStack(spacing: 16) {
-                Image(systemName: "list.bullet.clipboard")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.blue.gradient)
-                
-                VStack(spacing: 8) {
-                    Text("¡Comienza a organizarte!")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.primary)
-                    
-                    Text("Crea tu primera tarea y empieza a ser más productivo")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-            }
-            
-            Button(action: onAddTask) {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus.circle.fill")
-                    Text("Crear Primera Tarea")
-                }
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-                .background(
-                    LinearGradient(
-                        colors: [.blue, .purple],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
-                    in: Capsule()
-                )
-            }
-            .buttonStyle(.plain)
-            
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-struct EmptyFilteredTasksView: View {
-    let filter: String
-    let searchText: String
-    let onReset: () -> Void
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            
-            VStack(spacing: 12) {
-                Image(systemName: searchText.isEmpty ? "line.3.horizontal.decrease.circle" : "magnifyingglass")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.secondary)
-                
-                VStack(spacing: 4) {
-                    Text(searchText.isEmpty ? "Sin tareas en esta categoría" : "Sin resultados")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    
-                    Text(searchText.isEmpty ?
-                         "No hay tareas en '\(filter)'" :
-                         "No se encontraron tareas con '\(searchText)'"
-                    )
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                }
-            }
-            
-            Button(action: onReset) {
-                Text(searchText.isEmpty ? "Ver todas las tareas" : "Limpiar búsqueda")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.blue)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(.blue.opacity(0.1), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-// MARK: - Floating Action Button
-struct FloatingActionButton: View {
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "plus")
-                .font(.title2)
-                .fontWeight(.semibold)
-                .foregroundStyle(.white)
-                .frame(width: 56, height: 56)
-                .background(
-                    LinearGradient(
-                        colors: [.blue, .purple],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: Circle()
-                )
-                .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
-        }
-        .buttonStyle(.plain)
-        .scaleEffect(1.0)
-        .animation(.easeInOut(duration: 0.2), value: true)
-    }
-}
-
-// MARK: - Edit Task View
-struct EditTaskView: View {
-    @EnvironmentObject var model: ChoreModel
+    @EnvironmentObject var notificationService: NotificationService
     @Environment(\.dismiss) private var dismiss
     
-    let task: TaskItem
-    @State private var title: String
-    @State private var selectedCategoryId: UUID?
+    let date: Date
     
-    init(task: TaskItem) {
-        self.task = task
-        self._title = State(initialValue: task.title)
-        self._selectedCategoryId = State(initialValue: task.categoryId)
+    @State private var taskTitle = ""
+    @State private var selectedCategory: TaskCategory?
+    @State private var hasReminder = false
+    @State private var reminderTime = Date()
+    @State private var repeatDaily = false
+    @FocusState private var isTextFieldFocused: Bool
+    
+    private var canSave: Bool {
+        !taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
+    private var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .long
+        return formatter.string(from: date)
     }
     
     var body: some View {
         NavigationStack {
             Form {
-                Section("Detalles de la Tarea") {
-                    TextField("Título", text: $title)
+                Section {
+                    Text("Crear tarea para: \(formattedDate)")
+                        .font(.headline)
+                        .foregroundStyle(.blue)
+                        .padding(.vertical, 4)
+                } header: {
+                    Text("Fecha seleccionada")
                 }
                 
-                if !model.categories.isEmpty {
-                    Section("Categoría") {
-                        Picker("Categoría", selection: $selectedCategoryId) {
-                            Text("Sin categoría")
-                                .tag(nil as UUID?)
-                            
-                            ForEach(model.categories) { category in
-                                HStack {
-                                    Image(systemName: category.icon)
-                                        .foregroundStyle(category.swiftUIColor)
-                                    Text(category.name)
-                                }
-                                .tag(category.id as UUID?)
+                Section {
+                    TextField("¿Qué tarea quieres añadir?", text: $taskTitle)
+                        .focused($isTextFieldFocused)
+                        .submitLabel(.done)
+                        .autocapitalization(.sentences)
+                } header: {
+                    Text("Información básica")
+                }
+                
+                Section {
+                    Picker("Categoría", selection: $selectedCategory) {
+                        Text("Sin categoría")
+                            .tag(nil as TaskCategory?)
+                        
+                        ForEach(model.categories) { category in
+                            HStack {
+                                Image(systemName: category.icon)
+                                    .foregroundStyle(category.swiftUIColor)
+                                Text(category.name)
                             }
+                            .tag(category as TaskCategory?)
                         }
+                    }
+                    .pickerStyle(.menu)
+                } header: {
+                    Text("Categoría")
+                }
+                
+                Section {
+                    Toggle("Recordatorio", isOn: $hasReminder)
+                        .disabled(notificationService.notificationPermissionStatus != .authorized)
+                    
+                    if hasReminder {
+                        DatePicker("Hora del recordatorio", selection: $reminderTime, displayedComponents: .hourAndMinute)
+                        
+                        Toggle("Repetir diariamente", isOn: $repeatDaily)
+                    }
+                } header: {
+                    Text("Opciones")
+                } footer: {
+                    if notificationService.notificationPermissionStatus != .authorized {
+                        Text("Para configurar recordatorios, permite las notificaciones en Configuración")
                     }
                 }
             }
-            .navigationTitle("Editar Tarea")
+            .navigationTitle("Nueva Tarea")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button("Cancelar") {
                         dismiss()
                     }
                 }
                 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Guardar") {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Crear") {
                         saveTask()
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .fontWeight(.semibold)
+                    .disabled(!canSave)
                 }
+            }
+        }
+        .presentationDetents([.height(500)])
+        .presentationDragIndicator(.visible)
+        .onAppear {
+            isTextFieldFocused = true
+            // Configurar la hora del recordatorio para la fecha seleccionada
+            let calendar = Calendar.current
+            let components = calendar.dateComponents([.year, .month, .day], from: date)
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: reminderTime)
+            if let newReminderTime = calendar.date(bySettingHour: timeComponents.hour ?? 9,
+                                                   minute: timeComponents.minute ?? 0,
+                                                   second: 0,
+                                                   of: date) {
+                reminderTime = newReminderTime
             }
         }
     }
     
     private func saveTask() {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
         
-        // Update task properties directly
-        var updatedTask = task
-        updatedTask.title = trimmedTitle
-        updatedTask.categoryId = selectedCategoryId
+        // Crear la tarea específica para la fecha seleccionada
+        let task = TaskItem(
+            title: title,
+            categoryId: selectedCategory?.id,
+            hasReminder: hasReminder,
+            reminderTime: hasReminder ? reminderTime : nil,
+            repeatDaily: repeatDaily,
+            specificDate: date,
+            taskType: .specific
+        )
         
-        // Find and update the task in the model
-        if let index = model.tasks.firstIndex(where: { $0.id == task.id }) {
-            model.tasks[index] = updatedTask
-            model.saveTasks()
+        model.tasks.append(task)
+        model.saveTasks()
+        
+        // Programar notificación si está habilitada
+        if hasReminder {
+            notificationService.scheduleTaskReminder(for: task, at: reminderTime, repeatDaily: repeatDaily)
         }
         
         dismiss()
     }
 }
 
+// MARK: - Day Tasks View
+struct DayTasksView: View {
+    @EnvironmentObject var model: ChoreModel
+    @EnvironmentObject var notificationService: NotificationService
+    @Environment(\.dismiss) private var dismiss
+    
+    let date: Date
+    @State private var showingAddTaskForm = false
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Header
+                VStack(spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(formattedDate)
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                            
+                            Text("\(tasksForDate.count) tarea\(tasksForDate.count == 1 ? "" : "s")")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Button("Cerrar") {
+                            dismiss()
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(.blue)
+                    }
+                    
+                    Divider()
+                }
+                .padding()
+                .background(.regularMaterial)
+                
+                // Lista de tareas o estado vacío
+                if tasksForDate.isEmpty {
+                    // Estado vacío
+                    VStack(spacing: 16) {
+                        Image(systemName: "calendar.badge.plus")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.secondary)
+                        
+                        Text("No hay tareas para este día")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        
+                        Text("Toca el botón + para crear tu primera tarea")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        
+                        Button("Crear Primera Tarea") {
+                            showingAddTaskForm = true
+                        }
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .padding()
+                        .background(.blue, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.thinMaterial)
+                } else {
+                    // Lista de tareas
+                    List {
+                        ForEach(tasksForDate) { task in
+                            TaskRowView(task: task)
+                                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                                .listRowBackground(Color.clear)
+                                .onTapGesture {
+                                    toggleTaskCompletion(task)
+                                }
+                        }
+                        .onDelete(perform: deleteTasks)
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(.thinMaterial)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                // Botón flotante para agregar tarea (solo si hay tareas)
+                if !tasksForDate.isEmpty {
+                    Button(action: {
+                        showingAddTaskForm = true
+                    }) {
+                        Image(systemName: "plus")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .frame(width: 56, height: 56)
+                            .background(.blue, in: Circle())
+                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 20)
+                }
+            }
+        }
+        .presentationDetents([.height(600), .large])
+        .presentationDragIndicator(.visible)
+        .sheet(isPresented: $showingAddTaskForm) {
+            AddTaskForDateView(date: date)
+                .environmentObject(model)
+                .environmentObject(notificationService)
+        }
+    }
+    
+    private var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        return formatter.string(from: date)
+    }
+    
+    private var tasksForDate: [TaskItem] {
+        model.tasks.filter { task in
+            if task.taskType == .specific, let specificDate = task.specificDate {
+                return Calendar.current.isDate(specificDate, inSameDayAs: date)
+            }
+            return false
+        }
+    }
+    
+    private func toggleTaskCompletion(_ task: TaskItem) {
+        model.toggle(taskId: task.id)
+    }
+    
+    private func deleteTasks(at offsets: IndexSet) {
+        for index in offsets {
+            let task = tasksForDate[index]
+            if let taskIndex = model.tasks.firstIndex(where: { $0.id == task.id }) {
+                model.tasks.remove(at: taskIndex)
+            }
+        }
+        model.saveTasks()
+    }
+}
+
+// MARK: - Task Row View
+struct TaskRowView: View {
+    @EnvironmentObject var model: ChoreModel
+    let task: TaskItem
+    
+    private var isCompleted: Bool {
+        let todayRecord = model.todayRecord
+        return todayRecord.statuses.first(where: { $0.taskId == task.id })?.completed ?? false
+    }
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Estado de la tarea
+            Button(action: {
+                model.toggle(taskId: task.id)
+            }) {
+                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isCompleted ? .green : .secondary)
+                    .font(.title2)
+            }
+            .buttonStyle(.plain)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.title)
+                    .font(.headline)
+                    .foregroundStyle(isCompleted ? .secondary : .primary)
+                    .strikethrough(isCompleted)
+                
+                HStack(spacing: 8) {
+                    // Categoría
+                    if let category = model.categories.first(where: { $0.id == task.categoryId }) {
+                        Label {
+                            Text(category.name)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } icon: {
+                            Image(systemName: category.icon)
+                                .foregroundStyle(category.swiftUIColor)
+                                .font(.caption)
+                        }
+                    }
+                    
+                    // Recordatorio
+                    if task.hasReminder, let reminderTime = task.reminderTime {
+                        Label {
+                            Text(reminderTimeFormatter.string(from: reminderTime))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } icon: {
+                            Image(systemName: "bell.fill")
+                                .foregroundStyle(.blue)
+                                .font(.caption)
+                        }
+                    }
+                }
+            }
+            
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+    
+    private var reminderTimeFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }
+}
+
 #Preview {
-    TasksView()
-        .environmentObject(ChoreModel())
+    NavigationStack {
+        TasksView()
+            .environmentObject(ChoreModel())
+            .environmentObject(NotificationService.shared)
+    }
 }
