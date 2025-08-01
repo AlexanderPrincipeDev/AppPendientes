@@ -5,6 +5,7 @@ struct DailyChoresApp: App {
     @State private var showingSplash = true
     @StateObject private var notificationService = NotificationService.shared
     @StateObject private var model = ChoreModel()
+    @StateObject private var themeManager = ThemeManager.shared
     
     var body: some Scene {
         WindowGroup {
@@ -28,6 +29,9 @@ struct DailyChoresApp: App {
                 }
             }
             .environmentObject(model)
+            .environmentObject(themeManager)
+            .themedBackground()
+            .themedAccent()
         }
     }
 }

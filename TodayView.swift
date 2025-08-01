@@ -320,6 +320,7 @@ struct EnhancedTodayHeaderView: View {
 
 // MARK: - Enhanced Task Section
 struct EnhancedTaskSection: View {
+    @EnvironmentObject var model: ChoreModel
     let title: String
     let subtitle: String
     let tasks: [TaskItem]
@@ -332,6 +333,7 @@ struct EnhancedTaskSection: View {
         VStack(spacing: 0) {
             // Enhanced section header
             Button {
+                HapticManager.shared.lightImpact()
                 withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                     isExpanded.toggle()
                 }
@@ -431,6 +433,13 @@ struct EnhancedTodayTaskRow: View {
         HStack(spacing: 16) {
             // Enhanced completion button
             Button {
+                // Feedback háptico según la acción
+                if isCompleted {
+                    HapticManager.shared.taskUncompleted()
+                } else {
+                    HapticManager.shared.taskCompleted()
+                }
+                
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
                     if !isCompleted {
                         justCompleted = true

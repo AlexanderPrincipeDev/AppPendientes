@@ -171,16 +171,6 @@ struct TaskCalendarDayView: View {
         calendar.isDateInToday(date)
     }
     
-    private var isPastDate: Bool {
-        let today = Date()
-        return calendar.compare(date, to: today, toGranularity: .day) == .orderedAscending
-    }
-    
-    private var canSelectDate: Bool {
-        // Permitir seleccionar hoy y fechas futuras, sin importar si están en el mes actual
-        return !isPastDate
-    }
-    
     private var tasksForDate: [TaskItem] {
         model.tasks.filter { task in
             if task.taskType == .specific, let specificDate = task.specificDate {
@@ -195,10 +185,8 @@ struct TaskCalendarDayView: View {
     }
     
     private var textColor: Color {
-        if !canSelectDate {
-            return .secondary.opacity(0.3) // Fechas pasadas muy atenuadas
-        } else if !isInCurrentMonth {
-            return .secondary.opacity(0.7) // Fechas de otros meses pero futuras
+        if !isInCurrentMonth {
+            return .secondary.opacity(0.5)
         } else if isToday {
             return .white
         } else {
@@ -242,12 +230,12 @@ struct TaskCalendarDayView: View {
                     .stroke(isToday ? .clear : .clear, lineWidth: 1)
             )
         }
-        .disabled(!canSelectDate) // Solo deshabilitar fechas pasadas
+        .disabled(!isInCurrentMonth)
         .buttonStyle(.plain)
     }
     
     private func dayTapped() {
-        guard canSelectDate else { return } // Permitir fechas futuras independientemente del mes
+        guard isInCurrentMonth else { return }
         selectedDate = date
     }
 }
@@ -466,6 +454,9 @@ struct AddTaskForDateView: View {
     private func saveTask() {
         let title = taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return }
+        
+        // Feedback háptico al crear tarea
+        HapticManager.shared.taskCreated()
         
         // Crear la tarea específica para la fecha seleccionada
         let task = TaskItem(

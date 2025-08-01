@@ -2,7 +2,9 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var model = ChoreModel()
+    @EnvironmentObject var themeManager: ThemeManager
     @State private var selectedTab = 0
+    @State private var showingThemeSettings = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -29,13 +31,26 @@ struct ContentView: View {
                     Label("Historial", systemImage: "calendar")
                 }
                 .tag(3)
+                
+            SettingsTabView(showingThemeSettings: $showingThemeSettings)
+                .tabItem {
+                    Label("Ajustes", systemImage: "gearshape.fill")
+                }
+                .tag(4)
         }
         .environmentObject(model)
-        .accentColor(.blue)
+        .accentColor(themeManager.currentAccentColor)
+        .background(themeManager.themeColors.background)
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToTodayTab"))) { _ in
             withAnimation(.easeInOut(duration: 0.3)) {
                 selectedTab = 0
             }
+        }
+        .onChange(of: selectedTab) { oldValue, newValue in
+            HapticManager.shared.navigation()
+        }
+        .sheet(isPresented: $showingThemeSettings) {
+            ThemeSettingsView()
         }
     }
 }
