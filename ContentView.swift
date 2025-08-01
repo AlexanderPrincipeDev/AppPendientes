@@ -2,8 +2,6 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var model = ChoreModel()
-    @StateObject private var themeManager = ThemeManager.shared
-    @StateObject private var notificationService = NotificationService.shared
     @State private var selectedTab = 0
 
     var body: some View {
@@ -20,22 +18,26 @@ struct ContentView: View {
                 }
                 .tag(1)
 
+            HabitsView()
+                .tabItem {
+                    Label("Hábitos", systemImage: "heart.text.square.fill")
+                }
+                .tag(2)
+
             StatsView()
                 .tabItem {
                     Label("Estadísticas", systemImage: "chart.bar.fill")
                 }
-                .tag(2)
+                .tag(3)
                 
             HistoryView()
                 .tabItem {
                     Label("Historial", systemImage: "calendar")
                 }
-                .tag(3)
+                .tag(4)
         }
         .environmentObject(model)
-        .environmentObject(themeManager)
-        .environmentObject(notificationService)
-        .accentColor(themeManager.currentAccentColor)
+        .accentColor(.blue)
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToTodayTab"))) { _ in
             withAnimation(.easeInOut(duration: 0.3)) {
                 selectedTab = 0

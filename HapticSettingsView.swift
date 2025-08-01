@@ -1,88 +1,64 @@
 import SwiftUI
 
 struct HapticSettingsView: View {
-    @StateObject private var hapticManager = HapticManager.shared
+    @State private var isHapticsEnabled = true
     @State private var showingHapticTest = false
     
     var body: some View {
-        Form {
-            Section(header: Text("Configuración Háptica")) {
-                // Toggle principal
-                Toggle("Habilitar Retroalimentación Háptica", isOn: $hapticManager.isHapticsEnabled)
-                    .onChange(of: hapticManager.isHapticsEnabled) { newValue in
-                        if newValue {
-                            hapticManager.lightImpact()
-                        }
-                    }
-                
-                if hapticManager.isHapticsEnabled {
-                    // Control de intensidad
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Intensidad")
-                            Spacer()
-                            Text("\(Int(hapticManager.hapticsIntensity * 100))%")
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Slider(
-                            value: $hapticManager.hapticsIntensity,
-                            in: 0.1...1.0,
-                            step: 0.1
-                        ) {
-                            Text("Intensidad Háptica")
-                        } onEditingChanged: { editing in
-                            if !editing {
-                                hapticManager.mediumImpact()
+        NavigationStack {
+            Form {
+                Section(header: Text("Configuración Háptica")) {
+                    // Toggle principal
+                    Toggle("Habilitar Retroalimentación Háptica", isOn: $isHapticsEnabled)
+                        .onChange(of: isHapticsEnabled) { newValue in
+                            if newValue {
+                                HapticManager.shared.lightImpact()
                             }
                         }
-                    }
                     
-                    // Información sobre compatibilidad
-                    if !hapticManager.deviceSupportsHaptics() {
+                    if isHapticsEnabled {
+                        // Información sobre compatibilidad
                         Label("Los hápticos funcionan mejor en iPhone", systemImage: "info.circle")
                             .font(.caption)
                             .foregroundColor(.orange)
                     }
                 }
-            }
-            
-            if hapticManager.isHapticsEnabled {
-                Section(header: Text("Probar Hápticos")) {
-                    // Test de patrones básicos
-                    hapticTestButton("Ligero", pattern: .light)
-                    hapticTestButton("Medio", pattern: .medium)  
-                    hapticTestButton("Fuerte", pattern: .heavy)
-                    
-                    Divider()
-                    
-                    // Test de patrones de notificación
-                    hapticTestButton("Éxito ✅", pattern: .success)
-                    hapticTestButton("Advertencia ⚠️", pattern: .warning)
-                    hapticTestButton("Error ❌", pattern: .error)
-                    
-                    Divider()
-                    
-                    // Test de patrones especiales
-                    hapticTestButton("Tarea Completada 🎯", pattern: .taskCompletion)
-                    hapticTestButton("¡Logro Desbloqueado! 🏆", pattern: .achievement)
-                    hapticTestButton("¡Día Completado! 🎉", pattern: .celebration)
-                    hapticTestButton("Heartbeat 💓", pattern: .heartbeat)
+                
+                if isHapticsEnabled {
+                    Section(header: Text("Probar Hápticos")) {
+                        // Test de patrones básicos
+                        hapticTestButton("Ligero", action: { HapticManager.shared.lightImpact() })
+                        hapticTestButton("Medio", action: { HapticManager.shared.mediumImpact() })  
+                        hapticTestButton("Fuerte", action: { HapticManager.shared.heavyImpact() })
+                        
+                        Divider()
+                        
+                        // Test de patrones de notificación
+                        hapticTestButton("Éxito ✅", action: { HapticManager.shared.success() })
+                        hapticTestButton("Advertencia ⚠️", action: { HapticManager.shared.warning() })
+                        hapticTestButton("Error ❌", action: { HapticManager.shared.error() })
+                        
+                        Divider()
+                        
+                        // Test de patrones contextuales
+                        hapticTestButton("Tarea Completada 🎯", action: { HapticManager.shared.taskCompleted() })
+                        hapticTestButton("Navegación 🧭", action: { HapticManager.shared.navigation() })
+                        hapticTestButton("Selección 👆", action: { HapticManager.shared.selection() })
+                        hapticTestButton("Botón Presionado 🔘", action: { HapticManager.shared.buttonPress() })
+                    }
+                }
+                
+                Section(footer: footerText) {
+                    // Sección vacía solo para mostrar el footer
                 }
             }
-            
-            Section(footer: footerText) {
-                // Sección vacía solo para mostrar el footer
-            }
+            .navigationTitle("Configuración Háptica")
+            .navigationBarTitleDisplayMode(.inline)
         }
-        .navigationTitle("Configuración Háptica")
-        .navigationBarTitleDisplayMode(.inline)
     }
     
-    private func hapticTestButton(_ title: String, pattern: HapticTestPattern) -> some View {
-        Button(action: {
-            triggerTestPattern(pattern)
-        }) {
+    private func hapticTestButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             HStack {
                 Text(title)
                 Spacer()
@@ -93,31 +69,6 @@ struct HapticSettingsView: View {
         .foregroundColor(.primary)
     }
     
-    private func triggerTestPattern(_ pattern: HapticTestPattern) {
-        switch pattern {
-        case .light:
-            hapticManager.lightImpact()
-        case .medium:
-            hapticManager.mediumImpact()
-        case .heavy:
-            hapticManager.heavyImpact()
-        case .success:
-            hapticManager.success()
-        case .warning:
-            hapticManager.warning()
-        case .error:
-            hapticManager.error()
-        case .taskCompletion:
-            hapticManager.taskCompleted()
-        case .achievement:
-            hapticManager.achievementUnlocked()
-        case .celebration:
-            hapticManager.allTasksCompleted()
-        case .heartbeat:
-            hapticManager.heartbeatPattern()
-        }
-    }
-    
     private var footerText: some View {
         Text("La retroalimentación háptica mejora la experiencia de uso proporcionando respuestas táctiles a tus acciones. Los patrones están diseñados específicamente para diferentes tipos de interacciones en la app.")
             .font(.caption)
@@ -125,16 +76,9 @@ struct HapticSettingsView: View {
     }
 }
 
-enum HapticTestPattern {
-    case light, medium, heavy
-    case success, warning, error
-    case taskCompletion, achievement, celebration, heartbeat
-}
-
 // MARK: - Vista de Demostración Interactiva
 
 struct HapticDemoView: View {
-    @ObservedObject private var hapticManager = HapticManager.shared
     @State private var completedTasks = 0
     @State private var totalTasks = 5
     
@@ -154,7 +98,7 @@ struct HapticDemoView: View {
                     Spacer()
                     Button("Reset") {
                         completedTasks = 0
-                        hapticManager.lightImpact()
+                        HapticManager.shared.lightImpact()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -182,39 +126,6 @@ struct HapticDemoView: View {
             .background(Color(.systemGray6))
             .cornerRadius(15)
             
-            // Simulador de voz
-            VStack(spacing: 15) {
-                Text("Simular Grabación de Voz")
-                    .font(.headline)
-                
-                Button("Iniciar Grabación") {
-                    hapticManager.voiceRecordingStarted()
-                }
-                .buttonStyle(.bordered)
-                
-                Button("Detener Grabación") {
-                    hapticManager.voiceRecordingStopped()
-                }
-                .buttonStyle(.bordered)
-                
-                HStack(spacing: 20) {
-                    Button("Éxito 🎯") {
-                        hapticManager.voiceRecognitionSuccess()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    
-                    Button("Error ❌") {
-                        hapticManager.voiceRecognitionFailed()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-            }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(15)
-            
             Spacer()
         }
         .padding()
@@ -225,14 +136,15 @@ struct HapticDemoView: View {
     private func completeTask() {
         completedTasks += 1
         
-        // Patrón de progreso
-        hapticManager.progressPattern(progress: Float(completedTasks) / Float(totalTasks))
-        
-        // Si se completaron todas las tareas
+        // Feedback háptico basado en progreso
         if completedTasks >= totalTasks {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                hapticManager.allTasksCompleted()
+            // Si se completaron todas las tareas
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                HapticManager.shared.success()
             }
+        } else {
+            // Progreso normal
+            HapticManager.shared.taskCompleted()
         }
     }
 }

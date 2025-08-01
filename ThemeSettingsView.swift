@@ -9,97 +9,7 @@ struct ThemeSettingsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
-                    // Header con preview del tema actual
-                    ThemePreviewCard(theme: themeManager.currentTheme)
-                    
-                    // Sección de temas
-                    VStack(spacing: 16) {
-                        ThemeSectionHeader(title: "Temas", subtitle: "Personaliza la apariencia de la aplicación")
-                        
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
-                            ForEach(AppTheme.allCases, id: \.self) { theme in
-                                ThemeCard(
-                                    theme: theme,
-                                    isSelected: themeManager.currentTheme == theme
-                                ) {
-                                    HapticManager.shared.selectionChanged()
-                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                                        themeManager.setTheme(theme)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Sección de colores de acento
-                    VStack(spacing: 16) {
-                        ThemeSectionHeader(title: "Color de Acento", subtitle: "Elige el color principal de la interfaz")
-                        
-                        VStack(spacing: 12) {
-                            // Toggle para usar colores personalizados
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Colores Personalizados")
-                                        .font(.headline)
-                                        .foregroundStyle(themeManager.themeColors.primary)
-                                    
-                                    Text("Usar colores de acento personalizados en lugar del tema")
-                                        .font(.caption)
-                                        .foregroundStyle(themeManager.themeColors.secondary)
-                                }
-                                
-                                Spacer()
-                                
-                                Toggle("", isOn: $themeManager.useCustomColors)
-                                    .toggleStyle(CustomToggleStyle())
-                            }
-                            .padding(16)
-                            .background(themeManager.themeColors.cardBackground, in: RoundedRectangle(cornerRadius: 12))
-                            
-                            // Grid de colores de acento (solo visible si está habilitado)
-                            if themeManager.useCustomColors {
-                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
-                                    ForEach(AccentColor.allCases, id: \.self) { accentColor in
-                                        AccentColorButton(
-                                            accentColor: accentColor,
-                                            isSelected: themeManager.accentColor == accentColor
-                                        ) {
-                                            HapticManager.shared.lightImpact()
-                                            themeManager.setAccentColor(accentColor)
-                                        }
-                                    }
-                                }
-                                .transition(.asymmetric(
-                                    insertion: .scale(scale: 0.8).combined(with: .opacity),
-                                    removal: .scale(scale: 0.8).combined(with: .opacity)
-                                ))
-                            }
-                        }
-                    }
-                    
-                    // Información adicional
-                    VStack(spacing: 12) {
-                        InfoCard(
-                            icon: "lightbulb.fill",
-                            title: "Tip",
-                            description: "Los temas se aplican inmediatamente y se guardan automáticamente. Algunos temas funcionan mejor con el modo claro u oscuro del sistema.",
-                            color: themeManager.currentAccentColor
-                        )
-                        
-                        InfoCard(
-                            icon: "paintpalette.fill",
-                            title: "Personalización",
-                            description: "Puedes combinar cualquier tema con cualquier color de acento para crear tu estilo único.",
-                            color: themeManager.themeColors.success
-                        )
-                    }
-                    
-                    // Espaciado final
-                    Color.clear.frame(height: 32)
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
+                mainContent
             }
             .background(themeManager.themeColors.background)
             .navigationTitle("Temas y Colores")
@@ -116,6 +26,120 @@ struct ThemeSettingsView: View {
             }
         }
         .themedAccent()
+    }
+    
+    private var mainContent: some View {
+        VStack(spacing: 24) {
+            // Header con preview del tema actual
+            ThemePreviewCard(theme: themeManager.currentTheme)
+            
+            // Sección de temas
+            themesSection
+            
+            // Sección de colores de acento
+            accentColorsSection
+            
+            // Información adicional
+            infoSection
+            
+            // Espaciado final
+            Color.clear.frame(height: 32)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+    }
+    
+    private var themesSection: some View {
+        VStack(spacing: 16) {
+            ThemeSectionHeader(title: "Temas", subtitle: "Personaliza la apariencia de la aplicación")
+            
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
+                ForEach(AppTheme.allCases, id: \.self) { theme in
+                    ThemeCard(
+                        theme: theme,
+                        isSelected: themeManager.currentTheme == theme
+                    ) {
+                        HapticManager.shared.selection()
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                            themeManager.setTheme(theme)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private var accentColorsSection: some View {
+        VStack(spacing: 16) {
+            ThemeSectionHeader(title: "Color de Acento", subtitle: "Elige el color principal de la interfaz")
+            
+            VStack(spacing: 12) {
+                // Toggle para usar colores personalizados
+                customColorsToggle
+                
+                // Grid de colores de acento (solo visible si está habilitado)
+                if themeManager.useCustomColors {
+                    accentColorsGrid
+                }
+            }
+        }
+    }
+    
+    private var customColorsToggle: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Colores Personalizados")
+                    .font(.headline)
+                    .foregroundStyle(themeManager.themeColors.primary)
+                
+                Text("Usar colores de acento personalizados en lugar del tema")
+                    .font(.caption)
+                    .foregroundStyle(themeManager.themeColors.secondary)
+            }
+            
+            Spacer()
+            
+            Toggle("", isOn: $themeManager.useCustomColors)
+                .toggleStyle(CustomToggleStyle())
+        }
+        .padding(16)
+        .background(themeManager.themeColors.cardBackground, in: RoundedRectangle(cornerRadius: 12))
+    }
+    
+    private var accentColorsGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
+            ForEach(AccentColor.allCases, id: \.self) { accentColor in
+                AccentColorButton(
+                    accentColor: accentColor,
+                    isSelected: themeManager.accentColor == accentColor
+                ) {
+                    HapticManager.shared.lightImpact()
+                    themeManager.setAccentColor(accentColor)
+                }
+            }
+        }
+        .transition(.asymmetric(
+            insertion: .scale(scale: 0.8).combined(with: .opacity),
+            removal: .scale(scale: 0.8).combined(with: .opacity)
+        ))
+    }
+    
+    private var infoSection: some View {
+        VStack(spacing: 12) {
+            InfoCard(
+                icon: "lightbulb.fill",
+                title: "Tip",
+                description: "Los temas se aplican inmediatamente y se guardan automáticamente. Algunos temas funcionan mejor con el modo claro u oscuro del sistema.",
+                color: themeManager.currentAccentColor
+            )
+            
+            InfoCard(
+                icon: "paintpalette.fill",
+                title: "Personalización",
+                description: "Puedes combinar cualquier tema con cualquier color de acento para crear tu estilo único.",
+                color: themeManager.themeColors.success
+            )
+        }
     }
 }
 

@@ -143,7 +143,7 @@ struct StatsHeroSection: View {
             
             // Stats cards row
             HStack(spacing: 16) {
-                StatCard(
+                StatsCard(
                     title: "Completadas",
                     value: "\(todayStats.completed)",
                     subtitle: "de \(todayStats.total)",
@@ -151,7 +151,7 @@ struct StatsHeroSection: View {
                     icon: "checkmark.circle.fill"
                 )
                 
-                StatCard(
+                StatsCard(
                     title: "Promedio Semanal",
                     value: "\(Int(weekStats.avg * 100))%",
                     subtitle: trendText,
@@ -159,7 +159,7 @@ struct StatsHeroSection: View {
                     icon: weekStats.trend >= 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill"
                 )
                 
-                StatCard(
+                StatsCard(
                     title: "Racha",
                     value: "\(weekStats.streak)",
                     subtitle: "días activos",
@@ -201,8 +201,8 @@ struct StatsHeroSection: View {
     }
 }
 
-// MARK: - Stat Card
-struct StatCard: View {
+// MARK: - Stats Card
+struct StatsCard: View {
     let title: String
     let value: String
     let subtitle: String

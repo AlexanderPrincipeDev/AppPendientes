@@ -161,12 +161,12 @@ class ThemeManager: ObservableObject {
     
     private func saveTheme() {
         UserDefaults.standard.set(currentTheme.rawValue, forKey: themeKey)
-        HapticManager.shared.selectionChanged()
+        HapticManager.shared.selection()
     }
     
     private func saveAccentColor() {
         UserDefaults.standard.set(accentColor.rawValue, forKey: accentColorKey)
-        HapticManager.shared.selectionChanged()
+        HapticManager.shared.selection()
     }
     
     private func saveCustomColorsPreference() {

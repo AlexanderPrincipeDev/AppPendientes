@@ -10,6 +10,11 @@ class ChoreModel: ObservableObject {
     @Published var userName: String = ""
     @Published var isFirstLaunch: Bool = true
     
+    // MARK: - Habit System
+    @Published var habits: [Habit] = []
+    @Published var habitEntries: [HabitEntry] = []
+    @Published var habitStreaks: [HabitStreak] = []
+    
     private let notificationService = NotificationService.shared
 
     private let tasksFile = "tasks.json"
@@ -17,6 +22,10 @@ class ChoreModel: ObservableObject {
     private let gamificationFile = "gamification.json"
     private let categoriesFile = "categories.json"
     private let userDataFile = "userData.json"
+    // MARK: - Habit Files
+    private let habitsFile = "habits.json"
+    private let habitEntriesFile = "habitEntries.json"
+    private let habitStreaksFile = "habitStreaks.json"
 
     init() {
         loadAll()
@@ -41,6 +50,19 @@ class ChoreModel: ObservableObject {
     private var userDataURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(userDataFile)
+    }
+    // MARK: - Habit URLs
+    private var habitsURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(habitsFile)
+    }
+    private var habitEntriesURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(habitEntriesFile)
+    }
+    private var habitStreaksURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(habitStreaksFile)
     }
 
     func loadAll() {
@@ -73,6 +95,28 @@ class ChoreModel: ObservableObject {
            let decoded = try? JSONDecoder().decode(UserData.self, from: data) {
             userName = decoded.name
             isFirstLaunch = decoded.isFirstLaunch
+        }
+        // MARK: - Load Habits
+        if let data = try? Data(contentsOf: habitsURL),
+           let decoded = try? JSONDecoder().decode([Habit].self, from: data) {
+            habits = decoded
+        } else {
+            habits = []
+            saveHabits()
+        }
+        if let data = try? Data(contentsOf: habitEntriesURL),
+           let decoded = try? JSONDecoder().decode([HabitEntry].self, from: data) {
+            habitEntries = decoded
+        } else {
+            habitEntries = []
+            saveHabitEntries()
+        }
+        if let data = try? Data(contentsOf: habitStreaksURL),
+           let decoded = try? JSONDecoder().decode([HabitStreak].self, from: data) {
+            habitStreaks = decoded
+        } else {
+            habitStreaks = []
+            saveHabitStreaks()
         }
         
         // Limpiar tareas huérfanas después de cargar los datos
@@ -111,6 +155,22 @@ class ChoreModel: ObservableObject {
         let userData = UserData(name: userName, isFirstLaunch: isFirstLaunch)
         if let data = try? JSONEncoder().encode(userData) {
             try? data.write(to: userDataURL)
+        }
+    }
+    // MARK: - Habit Saving
+    func saveHabits() {
+        if let data = try? JSONEncoder().encode(habits) {
+            try? data.write(to: habitsURL)
+        }
+    }
+    func saveHabitEntries() {
+        if let data = try? JSONEncoder().encode(habitEntries) {
+            try? data.write(to: habitEntriesURL)
+        }
+    }
+    func saveHabitStreaks() {
+        if let data = try? JSONEncoder().encode(habitStreaks) {
+            try? data.write(to: habitStreaksURL)
         }
     }
 
@@ -316,19 +376,58 @@ class ChoreModel: ObservableObject {
         objectWillChange.send()
     }
     
-    func scheduleDailyReminder(at time: Date) {
-        let incompleteTasks = getIncompleteTasks()
-        if !incompleteTasks.isEmpty {
-            notificationService.scheduleTasksDailyReminder(tasks: incompleteTasks, at: time, userName: userName)
+    // MARK: - Task Reordering Methods
+    
+    /// Mueve una tarea desde una posición a otra
+    func moveTask(from source: IndexSet, to destination: Int) {
+        tasks.move(fromOffsets: source, toOffset: destination)
+        saveTasks()
+        updateTaskOrder()
+        HapticManager.shared.lightImpact()
+    }
+    
+    /// Mueve tareas específicas dentro de una fecha
+    func moveSpecificTasks(for date: Date, from source: IndexSet, to destination: Int) {
+        var specificTasks = getTasksForDate(date)
+        specificTasks.move(fromOffsets: source, toOffset: destination)
+        
+        // Actualizar el orden en el array principal
+        updateSpecificTasksOrder(for: date, orderedTasks: specificTasks)
+        saveTasks()
+        HapticManager.shared.lightImpact()
+    }
+    
+    /// Actualiza el orden de las tareas específicas para una fecha
+    private func updateSpecificTasksOrder(for date: Date, orderedTasks: [TaskItem]) {
+        // Remover las tareas específicas de esa fecha del array principal
+        tasks.removeAll { task in
+            if task.taskType == .specific, let specificDate = task.specificDate {
+                return Calendar.current.isDate(specificDate, inSameDayAs: date)
+            }
+            return false
+        }
+        
+        // Agregar las tareas reordenadas al final del array
+        tasks.append(contentsOf: orderedTasks)
+    }
+    
+    /// Obtiene las tareas para una fecha específica en orden
+    func getTasksForDate(_ date: Date) -> [TaskItem] {
+        return tasks.filter { task in
+            if task.taskType == .specific, let specificDate = task.specificDate {
+                return Calendar.current.isDate(specificDate, inSameDayAs: date)
+            }
+            return false
         }
     }
     
-    private func getIncompleteTasks() -> [TaskItem] {
-        let todayRecord = self.todayRecord
-        return tasks.filter { task in
-            let status = todayRecord.statuses.first { $0.taskId == task.id }
-            return status?.completed != true
+    /// Actualiza el orden interno después de cambios
+    private func updateTaskOrder() {
+        // Asignar índices de orden basados en la posición actual
+        for (index, _) in tasks.enumerated() {
+            tasks[index].sortOrder = index
         }
+        objectWillChange.send()
     }
     
     // MARK: - Category Methods
@@ -587,6 +686,227 @@ class ChoreModel: ObservableObject {
         widgetService.updateTaskProgress(tasks: currentTasks, todayRecord: currentRecord)
         
         print("🔄 Widget actualizado - Forzando recarga de timeline")
+    }
+
+    // MARK: - Habit Management Methods
+    
+    /// Agrega un nuevo hábito
+    func addHabit(_ habit: Habit) {
+        habits.append(habit)
+        
+        // Crear streak tracking para el nuevo hábito
+        let streak = HabitStreak(habitId: habit.id)
+        habitStreaks.append(streak)
+        
+        // Crear entrada para hoy si no existe
+        createHabitEntryForToday(habitId: habit.id)
+        
+        // Programar recordatorio si está configurado
+        if habit.hasReminder, let reminderTime = habit.reminderTime {
+            scheduleHabitReminder(habit: habit, time: reminderTime)
+        }
+        
+        saveHabits()
+        saveHabitStreaks()
+        saveHabitEntries()
+        objectWillChange.send()
+    }
+    
+    /// Elimina un hábito y todos sus datos relacionados
+    func deleteHabit(habitId: UUID) {
+        // Cancelar notificaciones
+        notificationService.cancelNotification(for: habitId)
+        
+        // Remover hábito
+        habits.removeAll { $0.id == habitId }
+        
+        // Remover todas las entradas del hábito
+        habitEntries.removeAll { $0.habitId == habitId }
+        
+        // Remover streak del hábito
+        habitStreaks.removeAll { $0.habitId == habitId }
+        
+        saveHabits()
+        saveHabitEntries()
+        saveHabitStreaks()
+        objectWillChange.send()
+    }
+    
+    /// Actualiza el progreso de un hábito para hoy
+    func updateHabitProgress(habitId: UUID, progress: Int) {
+        let dateKey = todayKey()
+        
+        // Buscar entrada existente o crear una nueva
+        if let index = habitEntries.firstIndex(where: { $0.habitId == habitId && $0.date == dateKey }) {
+            habitEntries[index].progress = progress
+            
+            // Determinar si el hábito está completado
+            if let habit = habits.first(where: { $0.id == habitId }) {
+                let wasCompleted = habitEntries[index].isCompleted
+                habitEntries[index].isCompleted = progress >= habit.target
+                
+                // Si se acaba de completar
+                if !wasCompleted && habitEntries[index].isCompleted {
+                    habitEntries[index].completedAt = Date()
+                    updateHabitStreak(habitId: habitId, completed: true, date: dateKey)
+                    
+                    // Otorgar puntos por completar hábito
+                    gamification.addPoints(10)
+                    saveGamification()
+                    
+                    // Feedback háptico
+                    HapticManager.shared.successImpact()
+                }
+            }
+        } else {
+            var entry = HabitEntry(habitId: habitId, date: dateKey, progress: progress)
+            if let habit = habits.first(where: { $0.id == habitId }) {
+                entry.isCompleted = progress >= habit.target
+                if entry.isCompleted {
+                    entry.completedAt = Date()
+                    updateHabitStreak(habitId: habitId, completed: true, date: dateKey)
+                    gamification.addPoints(10)
+                    saveGamification()
+                    HapticManager.shared.successImpact()
+                }
+            }
+            habitEntries.append(entry)
+        }
+        
+        saveHabitEntries()
+        objectWillChange.send()
+    }
+    
+    /// Marca un hábito como completado/no completado
+    func toggleHabitCompletion(habitId: UUID) {
+        let dateKey = todayKey()
+        
+        if let index = habitEntries.firstIndex(where: { $0.habitId == habitId && $0.date == dateKey }) {
+            let wasCompleted = habitEntries[index].isCompleted
+            habitEntries[index].isCompleted.toggle()
+            
+            if habitEntries[index].isCompleted {
+                habitEntries[index].completedAt = Date()
+                // Si el hábito tiene objetivo, marcarlo como alcanzado
+                if let habit = habits.first(where: { $0.id == habitId }) {
+                    habitEntries[index].progress = habit.target
+                }
+                updateHabitStreak(habitId: habitId, completed: true, date: dateKey)
+                gamification.addPoints(10)
+                HapticManager.shared.successImpact()
+            } else {
+                habitEntries[index].completedAt = nil
+                habitEntries[index].progress = 0
+                updateHabitStreak(habitId: habitId, completed: false, date: dateKey)
+                HapticManager.shared.lightImpact()
+            }
+            
+            saveHabitEntries()
+            saveGamification()
+            objectWillChange.send()
+        } else {
+            // Crear nueva entrada
+            var entry = HabitEntry(habitId: habitId, date: dateKey)
+            entry.isCompleted = true
+            entry.completedAt = Date()
+            if let habit = habits.first(where: { $0.id == habitId }) {
+                entry.progress = habit.target
+            }
+            habitEntries.append(entry)
+            
+            updateHabitStreak(habitId: habitId, completed: true, date: dateKey)
+            gamification.addPoints(10)
+            saveHabitEntries()
+            saveGamification()
+            HapticManager.shared.successImpact()
+            objectWillChange.send()
+        }
+    }
+    
+    /// Actualiza el streak de un hábito
+    private func updateHabitStreak(habitId: UUID, completed: Bool, date: String) {
+        if let index = habitStreaks.firstIndex(where: { $0.habitId == habitId }) {
+            habitStreaks[index].updateStreak(completed: completed, date: date)
+        } else {
+            var newStreak = HabitStreak(habitId: habitId)
+            newStreak.updateStreak(completed: completed, date: date)
+            habitStreaks.append(newStreak)
+        }
+        saveHabitStreaks()
+    }
+    
+    /// Crea entrada de hábito para hoy si no existe
+    private func createHabitEntryForToday(habitId: UUID) {
+        let dateKey = todayKey()
+        let exists = habitEntries.contains { $0.habitId == habitId && $0.date == dateKey }
+        
+        if !exists {
+            let entry = HabitEntry(habitId: habitId, date: dateKey)
+            habitEntries.append(entry)
+            saveHabitEntries()
+        }
+    }
+    
+    /// Programa recordatorio para un hábito
+    private func scheduleHabitReminder(habit: Habit, time: Date) {
+        // Implementar notificación específica para hábitos
+        // Por ahora usamos el sistema existente
+        if habit.hasReminder, let reminderTime = habit.reminderTime {
+            notificationService.scheduleHabitReminder(habit: habit, at: reminderTime)
+        }
+    }
+    
+    // MARK: - Habit Computed Properties
+    
+    /// Obtiene el progreso de un hábito para hoy
+    func getHabitProgressToday(habitId: UUID) -> Int {
+        let dateKey = todayKey()
+        return habitEntries.first { $0.habitId == habitId && $0.date == dateKey }?.progress ?? 0
+    }
+    
+    /// Verifica si un hábito está completado hoy
+    func isHabitCompletedToday(habitId: UUID) -> Bool {
+        let dateKey = todayKey()
+        return habitEntries.first { $0.habitId == habitId && $0.date == dateKey }?.isCompleted ?? false
+    }
+    
+    /// Obtiene el streak actual de un hábito
+    func getHabitStreak(habitId: UUID) -> HabitStreak? {
+        return habitStreaks.first { $0.habitId == habitId }
+    }
+    
+    /// Obtiene las entradas de un hábito para los últimos N días
+    func getHabitEntries(habitId: UUID, days: Int = 30) -> [HabitEntry] {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        
+        let endDate = Date()
+        let startDate = Calendar.current.date(byAdding: .day, value: -days, to: endDate) ?? endDate
+        
+        return habitEntries.filter { entry in
+            guard entry.habitId == habitId,
+                  let entryDate = dateFormatter.date(from: entry.date) else { return false }
+            return entryDate >= startDate && entryDate <= endDate
+        }.sorted { $0.date > $1.date }
+    }
+    
+    /// Obtiene estadísticas de hábitos para hoy
+    var todayHabitStats: (total: Int, completed: Int, percentage: Double) {
+        let activeHabits = habits.filter { $0.isActive }
+        let dateKey = todayKey()
+        let completedCount = habitEntries.filter {
+            $0.date == dateKey && $0.isCompleted
+        }.count
+        
+        let total = activeHabits.count
+        let percentage = total > 0 ? Double(completedCount) / Double(total) : 0.0
+        
+        return (total: total, completed: completedCount, percentage: percentage)
+    }
+    
+    /// Obtiene hábitos activos
+    var activeHabits: [Habit] {
+        return habits.filter { $0.isActive }
     }
 }
 

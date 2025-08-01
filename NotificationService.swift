@@ -72,7 +72,7 @@ class NotificationService: ObservableObject {
     
     func cancelNotification(for taskId: UUID) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(
-            withIdentifiers: ["task_\(taskId.uuidString)"]
+            withIdentifiers: ["task_\(taskId.uuidString)", "habit_\(taskId.uuidString)"]
         )
     }
     
@@ -141,6 +141,39 @@ class NotificationService: ObservableObject {
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
                 print("Error scheduling completion celebration: \(error)")
+            }
+        }
+    }
+    
+    // MARK: - Habit Notifications
+    func scheduleHabitReminder(habit: Habit, at time: Date) {
+        guard notificationPermissionStatus == .authorized else { return }
+        
+        let content = UNMutableNotificationContent()
+        content.title = "Recordatorio de hábito"
+        content.body = "Es hora de: \(habit.name)"
+        content.sound = .default
+        content.badge = 1
+        content.userInfo = ["habitId": habit.id.uuidString, "type": "habit"]
+        
+        // Schedule daily reminder
+        let calendar = Calendar.current
+        let dateComponents = calendar.dateComponents([.hour, .minute], from: time)
+        
+        let trigger = UNCalendarNotificationTrigger(
+            dateMatching: dateComponents,
+            repeats: true
+        )
+        
+        let request = UNNotificationRequest(
+            identifier: "habit_\(habit.id.uuidString)",
+            content: content,
+            trigger: trigger
+        )
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Error scheduling habit notification: \(error)")
             }
         }
     }
