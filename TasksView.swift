@@ -613,11 +613,41 @@ struct DayTasksView: View {
     private func deleteTasks(at offsets: IndexSet) {
         for index in offsets {
             let task = tasksForDate[index]
+            
+            // Eliminar la tarea del modelo
             if let taskIndex = model.tasks.firstIndex(where: { $0.id == task.id }) {
                 model.tasks.remove(at: taskIndex)
             }
+            
+            // Eliminar el estado de la tarea del registro correspondiente a su fecha
+            if task.taskType == .specific, let specificDate = task.specificDate {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd"
+                let dateKey = dateFormatter.string(from: specificDate)
+                
+                if let recordIndex = model.records.firstIndex(where: { $0.date == dateKey }) {
+                    model.records[recordIndex].statuses.removeAll { status in
+                        status.taskId == task.id
+                    }
+                }
+            } else {
+                // Para tareas diarias, eliminar del registro de hoy
+                let todayKey = {
+                    let fmt = DateFormatter()
+                    fmt.dateFormat = "yyyy-MM-dd"
+                    return fmt.string(from: Date())
+                }()
+                
+                if let recordIndex = model.records.firstIndex(where: { $0.date == todayKey }) {
+                    model.records[recordIndex].statuses.removeAll { status in
+                        status.taskId == task.id
+                    }
+                }
+            }
         }
+        
         model.saveTasks()
+        model.saveRecords()
     }
 }
 
@@ -627,21 +657,29 @@ struct TaskRowView: View {
     let task: TaskItem
     
     private var isCompleted: Bool {
-        let todayRecord = model.todayRecord
-        return todayRecord.statuses.first(where: { $0.taskId == task.id })?.completed ?? false
+        // Para tareas específicas, buscar en el registro de la fecha correspondiente
+        if task.taskType == .specific, let specificDate = task.specificDate {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            let dateKey = dateFormatter.string(from: specificDate)
+            
+            if let record = model.records.first(where: { $0.date == dateKey }) {
+                return record.statuses.first(where: { $0.taskId == task.id })?.completed ?? false
+            }
+        } else {
+            // Para tareas diarias, usar el registro de hoy
+            let todayRecord = model.todayRecord
+            return todayRecord.statuses.first(where: { $0.taskId == task.id })?.completed ?? false
+        }
+        return false
     }
     
     var body: some View {
         HStack(spacing: 12) {
-            // Estado de la tarea
-            Button(action: {
-                model.toggle(taskId: task.id)
-            }) {
-                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isCompleted ? .green : .secondary)
-                    .font(.title2)
-            }
-            .buttonStyle(.plain)
+            // Indicador visual del estado (sin funcionalidad de toggle)
+            Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isCompleted ? .green : .secondary)
+                .font(.title2)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)
@@ -674,6 +712,19 @@ struct TaskRowView: View {
                                 .foregroundStyle(.blue)
                                 .font(.caption)
                         }
+                    }
+                    
+                    Spacer()
+                    
+                    // Indicador de que se marca desde "Hoy"
+                    if task.taskType == .specific, let specificDate = task.specificDate,
+                       Calendar.current.isDateInToday(specificDate) {
+                        Text("Marcar en 'Hoy'")
+                            .font(.caption2)
+                            .foregroundStyle(.blue)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
                     }
                 }
             }

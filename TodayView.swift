@@ -7,7 +7,26 @@ struct TodayView: View {
     
     private var todayTasks: [TaskItem] {
         let activeTaskIds = Set(model.todayRecord.statuses.map { $0.taskId })
-        return model.tasks.filter { activeTaskIds.contains($0.id) }
+        let dailyTasks = model.tasks.filter { activeTaskIds.contains($0.id) }
+        
+        // Agregar tareas específicas para hoy
+        let calendar = Calendar.current
+        let specificTasksForToday = model.tasks.filter { task in
+            if task.taskType == .specific, let specificDate = task.specificDate {
+                return calendar.isDateInToday(specificDate)
+            }
+            return false
+        }
+        
+        // Combinar ambos tipos de tareas, evitando duplicados
+        var allTasks = dailyTasks
+        for specificTask in specificTasksForToday {
+            if !allTasks.contains(where: { $0.id == specificTask.id }) {
+                allTasks.append(specificTask)
+            }
+        }
+        
+        return allTasks
     }
     
     private var completedTasks: [TaskItem] {

@@ -89,6 +89,8 @@ class ChoreModel: ObservableObject {
         if let data = try? JSONEncoder().encode(tasks) {
             try? data.write(to: tasksURL)
         }
+        // Sincronizar tareas específicas de hoy con el registro diario
+        syncTodaySpecificTasks()
     }
     func saveRecords() {
         if let data = try? JSONEncoder().encode(records) {
@@ -155,6 +157,47 @@ class ChoreModel: ObservableObject {
             let newRecord = DailyRecord(date: key, statuses: statuses)
             records.insert(newRecord, at: 0)
             saveRecords()
+        }
+    }
+    
+    private func syncTodaySpecificTasks() {
+        let key = todayKey()
+        let today = Date()
+        
+        // Buscar tareas específicas creadas para hoy
+        let todaySpecificTasks = tasks.filter { task in
+            if task.taskType == .specific, let specificDate = task.specificDate {
+                return Calendar.current.isDate(specificDate, inSameDayAs: today)
+            }
+            return false
+        }
+        
+        // Asegurar que existe un registro para hoy
+        var recordIndex = records.firstIndex(where: { $0.date == key })
+        if recordIndex == nil {
+            let newRecord = DailyRecord(date: key, statuses: [])
+            records.insert(newRecord, at: 0)
+            recordIndex = 0
+        }
+        
+        guard let rIndex = recordIndex else { return }
+        
+        var hasChanges = false
+        
+        // Agregar las tareas específicas de hoy al registro si no están ya
+        for task in todaySpecificTasks {
+            if !records[rIndex].statuses.contains(where: { $0.taskId == task.id }) {
+                let newStatus = TaskStatus(taskId: task.id, completed: false, completedAt: nil)
+                records[rIndex].statuses.append(newStatus)
+                hasChanges = true
+            }
+        }
+        
+        // Guardar si hubo cambios
+        if hasChanges {
+            saveRecords()
+            updateWidgetData()
+            objectWillChange.send()
         }
     }
     
