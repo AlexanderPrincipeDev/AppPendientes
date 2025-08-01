@@ -13,6 +13,15 @@ struct TaskItem: Identifiable, Codable, Equatable, Hashable {
     enum TaskType: String, Codable, CaseIterable {
         case daily = "daily"
         case specific = "specific"
+        
+        var displayName: String {
+            switch self {
+            case .daily:
+                return "Diaria"
+            case .specific:
+                return "Específica"
+            }
+        }
     }
 
     init(title: String, categoryId: UUID? = nil, hasReminder: Bool = false, reminderTime: Date? = nil, repeatDaily: Bool = true, specificDate: Date? = nil, taskType: TaskType = .daily) {

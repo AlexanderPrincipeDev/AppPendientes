@@ -3,6 +3,7 @@ import SwiftUI
 struct TodayView: View {
     @EnvironmentObject var model: ChoreModel
     @State private var showingAddTask = false
+    @State private var showingVoiceTaskCreation = false
     @State private var scrollOffset: CGFloat = 0
     
     private var todayTasks: [TaskItem] {
@@ -103,6 +104,39 @@ struct TodayView: View {
                     // Trigger refresh animation
                 }
             }
+            .overlay(alignment: .bottomTrailing) {
+                // Floating voice button
+                VStack(spacing: 16) {
+                    // Voice task creation button
+                    Button(action: {
+                        HapticManager.shared.buttonPress()
+                        showingVoiceTaskCreation = true
+                    }) {
+                        Image(systemName: "mic.fill")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .frame(width: 56, height: 56)
+                            .background(
+                                LinearGradient(
+                                    colors: [.purple, .blue],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                in: Circle()
+                            )
+                            .shadow(color: .purple.opacity(0.3), radius: 8, x: 0, y: 4)
+                    }
+                    .scaleEffect(showingVoiceTaskCreation ? 0.9 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingVoiceTaskCreation)
+                }
+                .padding(.trailing, 20)
+                .padding(.bottom, 20)
+            }
+        }
+        .sheet(isPresented: $showingVoiceTaskCreation) {
+            VoiceTaskCreationView()
+                .environmentObject(model)
         }
     }
 }

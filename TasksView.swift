@@ -3,8 +3,10 @@ import SwiftUI
 struct TasksView: View {
     @EnvironmentObject var model: ChoreModel
     @EnvironmentObject var notificationService: NotificationService
+    @EnvironmentObject var themeManager: ThemeManager
     @State private var selectedDate: Date? = nil
     @State private var showingDayView = false
+    @State private var showingVoiceCreation = false
     
     var body: some View {
         NavigationStack {
@@ -18,6 +20,28 @@ struct TasksView: View {
             }
             .navigationTitle("Tareas")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showingVoiceCreation = true
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 16, weight: .medium))
+                            Text("Crear por Voz")
+                                .font(.system(size: 15, weight: .medium))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(themeManager.currentAccentColor)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
             .sheet(isPresented: $showingDayView) {
                 selectedDate = nil
             } content: {
@@ -26,6 +50,11 @@ struct TasksView: View {
                         .environmentObject(model)
                         .environmentObject(notificationService)
                 }
+            }
+            .sheet(isPresented: $showingVoiceCreation) {
+                VoiceTaskCreationView()
+                    .environmentObject(model)
+                    .environmentObject(themeManager)
             }
             .onChange(of: selectedDate) { oldValue, newValue in
                 if newValue != nil && !showingDayView {

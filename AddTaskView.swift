@@ -3,6 +3,7 @@ import SwiftUI
 struct AddTaskView: View {
     @EnvironmentObject var model: ChoreModel
     @EnvironmentObject var notificationService: NotificationService
+    @EnvironmentObject var themeManager: ThemeManager
     @Environment(\.dismiss) private var dismiss
     
     @State private var taskTitle = ""
@@ -11,6 +12,7 @@ struct AddTaskView: View {
     @State private var hasReminder = false
     @State private var reminderTime = Date()
     @State private var repeatDaily = true
+    @State private var showingVoiceCreation = false
     @FocusState private var isTextFieldFocused: Bool
     
     private var canSave: Bool {
@@ -21,12 +23,31 @@ struct AddTaskView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("¿Qué tarea quieres añadir?", text: $taskTitle)
-                        .focused($isTextFieldFocused)
-                        .submitLabel(.done)
-                        .autocapitalization(.sentences)
+                    HStack {
+                        TextField("¿Qué tarea quieres añadir?", text: $taskTitle)
+                            .focused($isTextFieldFocused)
+                            .submitLabel(.done)
+                            .autocapitalization(.sentences)
+                        
+                        Button(action: {
+                            showingVoiceCreation = true
+                        }) {
+                            Image(systemName: "mic.fill")
+                                .font(.title3)
+                                .foregroundStyle(themeManager.currentAccentColor)
+                                .padding(8)
+                                .background(
+                                    Circle()
+                                        .fill(themeManager.currentAccentColor.opacity(0.1))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 } header: {
                     Text("Información básica")
+                } footer: {
+                    Text("También puedes crear tareas usando tu voz")
+                        .foregroundStyle(themeManager.themeColors.secondary)
                 }
                 
                 Section {
@@ -72,13 +93,13 @@ struct AddTaskView: View {
             .navigationTitle("Nueva Tarea")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancelar") {
                         dismiss()
                     }
                 }
                 
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Añadir") {
                         saveTask()
                     }
@@ -89,6 +110,11 @@ struct AddTaskView: View {
         }
         .presentationDetents([.height(400)])
         .presentationDragIndicator(.visible)
+        .sheet(isPresented: $showingVoiceCreation) {
+            VoiceTaskCreationView()
+                .environmentObject(model)
+                .environmentObject(themeManager)
+        }
         .onAppear {
             isTextFieldFocused = true
         }

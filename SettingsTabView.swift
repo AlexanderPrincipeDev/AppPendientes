@@ -6,6 +6,7 @@ struct SettingsTabView: View {
     @Binding var showingThemeSettings: Bool
     @State private var showingDataManagement = false
     @State private var showingAbout = false
+    @State private var showingVoiceTaskCreation = false
     
     var body: some View {
         NavigationStack {
@@ -18,14 +19,26 @@ struct SettingsTabView: View {
                     VStack(spacing: 16) {
                         SectionHeader(title: "Personalización", subtitle: "Configura la apariencia de la app")
                         
-                        SettingsCard(
-                            icon: "paintpalette.fill",
-                            title: "Temas y Colores",
-                            subtitle: "Personaliza la apariencia",
-                            accentColor: themeManager.currentAccentColor
-                        ) {
-                            HapticManager.shared.buttonPress()
-                            showingThemeSettings = true
+                        VStack(spacing: 12) {
+                            SettingsCard(
+                                icon: "paintpalette.fill",
+                                title: "Temas y Colores",
+                                subtitle: "Personaliza la apariencia",
+                                accentColor: themeManager.currentAccentColor
+                            ) {
+                                HapticManager.shared.buttonPress()
+                                showingThemeSettings = true
+                            }
+                            
+                            SettingsCard(
+                                icon: "mic.fill",
+                                title: "Crear Tareas por Voz",
+                                subtitle: "Dicta tus tareas usando reconocimiento de voz",
+                                accentColor: .purple
+                            ) {
+                                HapticManager.shared.buttonPress()
+                                showingVoiceTaskCreation = true
+                            }
                         }
                     }
                     
@@ -104,6 +117,10 @@ struct SettingsTabView: View {
         }
         .sheet(isPresented: $showingAbout) {
             AboutView()
+        }
+        .sheet(isPresented: $showingVoiceTaskCreation) {
+            VoiceTaskCreationView()
+                .environmentObject(model)
         }
     }
 }
@@ -307,6 +324,7 @@ struct StatBox: View {
     }
 }
 
+// MARK: - Section Header (reutilizable)
 // MARK: - Placeholder Views
 struct DataManagementView: View {
     @Environment(\.dismiss) private var dismiss
@@ -368,8 +386,3 @@ struct AboutView: View {
     }
 }
 
-#Preview {
-    SettingsTabView(showingThemeSettings: .constant(false))
-        .environmentObject(ThemeManager.shared)
-        .environmentObject(ChoreModel())
-}
