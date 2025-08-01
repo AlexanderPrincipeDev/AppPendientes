@@ -15,7 +15,7 @@ struct ThemeSettingsView: View {
                     
                     // Sección de temas
                     VStack(spacing: 16) {
-                        SectionHeader(title: "Temas", subtitle: "Personaliza la apariencia de la aplicación")
+                        ThemeSectionHeader(title: "Temas", subtitle: "Personaliza la apariencia de la aplicación")
                         
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
                             ForEach(AppTheme.allCases, id: \.self) { theme in
@@ -23,7 +23,7 @@ struct ThemeSettingsView: View {
                                     theme: theme,
                                     isSelected: themeManager.currentTheme == theme
                                 ) {
-                                    HapticManager.shared.selection()
+                                    HapticManager.shared.selectionChanged()
                                     withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                                         themeManager.setTheme(theme)
                                     }
@@ -34,7 +34,7 @@ struct ThemeSettingsView: View {
                     
                     // Sección de colores de acento
                     VStack(spacing: 16) {
-                        SectionHeader(title: "Color de Acento", subtitle: "Elige el color principal de la interfaz")
+                        ThemeSectionHeader(title: "Color de Acento", subtitle: "Elige el color principal de la interfaz")
                         
                         VStack(spacing: 12) {
                             // Toggle para usar colores personalizados
@@ -107,7 +107,7 @@ struct ThemeSettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Listo") {
-                        HapticManager.shared.buttonPress()
+                        HapticManager.shared.lightImpact()
                         dismiss()
                     }
                     .fontWeight(.semibold)
@@ -317,8 +317,8 @@ struct CustomToggleStyle: ToggleStyle {
     }
 }
 
-// MARK: - Section Header
-struct SectionHeader: View {
+// MARK: - Theme Section Header
+struct ThemeSectionHeader: View {
     let title: String
     let subtitle: String
     @StateObject private var themeManager = ThemeManager.shared

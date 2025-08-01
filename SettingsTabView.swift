@@ -6,7 +6,6 @@ struct SettingsTabView: View {
     @Binding var showingThemeSettings: Bool
     @State private var showingDataManagement = false
     @State private var showingAbout = false
-    @State private var showingVoiceTaskCreation = false
     
     var body: some View {
         NavigationStack {
@@ -19,26 +18,14 @@ struct SettingsTabView: View {
                     VStack(spacing: 16) {
                         SectionHeader(title: "Personalización", subtitle: "Configura la apariencia de la app")
                         
-                        VStack(spacing: 12) {
-                            SettingsCard(
-                                icon: "paintpalette.fill",
-                                title: "Temas y Colores",
-                                subtitle: "Personaliza la apariencia",
-                                accentColor: themeManager.currentAccentColor
-                            ) {
-                                HapticManager.shared.buttonPress()
-                                showingThemeSettings = true
-                            }
-                            
-                            SettingsCard(
-                                icon: "mic.fill",
-                                title: "Crear Tareas por Voz",
-                                subtitle: "Dicta tus tareas usando reconocimiento de voz",
-                                accentColor: .purple
-                            ) {
-                                HapticManager.shared.buttonPress()
-                                showingVoiceTaskCreation = true
-                            }
+                        SettingsCard(
+                            icon: "paintpalette.fill",
+                            title: "Temas y Colores",
+                            subtitle: "Personaliza la apariencia",
+                            accentColor: themeManager.currentAccentColor
+                        ) {
+                            HapticManager.shared.lightImpact()
+                            showingThemeSettings = true
                         }
                     }
                     
@@ -63,7 +50,7 @@ struct SettingsTabView: View {
                                 subtitle: "Exportar, importar o limpiar datos",
                                 accentColor: .orange
                             ) {
-                                HapticManager.shared.buttonPress()
+                                HapticManager.shared.lightImpact()
                                 showingDataManagement = true
                             }
                         }
@@ -80,7 +67,7 @@ struct SettingsTabView: View {
                                 subtitle: "Versión, desarrollador y más",
                                 accentColor: .purple
                             ) {
-                                HapticManager.shared.buttonPress()
+                                HapticManager.shared.lightImpact()
                                 showingAbout = true
                             }
                             
@@ -90,7 +77,7 @@ struct SettingsTabView: View {
                                 subtitle: "Ayúdanos con una reseña",
                                 accentColor: .pink
                             ) {
-                                HapticManager.shared.buttonPress()
+                                HapticManager.shared.lightImpact()
                                 // Abrir App Store para calificar
                                 if let url = URL(string: "https://apps.apple.com/app/id-your-app-id") {
                                     UIApplication.shared.open(url)
@@ -117,10 +104,6 @@ struct SettingsTabView: View {
         }
         .sheet(isPresented: $showingAbout) {
             AboutView()
-        }
-        .sheet(isPresented: $showingVoiceTaskCreation) {
-            VoiceTaskCreationView()
-                .environmentObject(model)
         }
     }
 }
@@ -325,6 +308,33 @@ struct StatBox: View {
 }
 
 // MARK: - Section Header (reutilizable)
+struct SectionHeader: View {
+    let title: String
+    let subtitle: String
+    @EnvironmentObject var themeManager: ThemeManager
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundStyle(themeManager.themeColors.primary)
+                
+                Spacer()
+            }
+            
+            HStack {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(themeManager.themeColors.secondary)
+                
+                Spacer()
+            }
+        }
+    }
+}
+
 // MARK: - Placeholder Views
 struct DataManagementView: View {
     @Environment(\.dismiss) private var dismiss
@@ -386,3 +396,8 @@ struct AboutView: View {
     }
 }
 
+#Preview {
+    SettingsTabView(showingThemeSettings: .constant(false))
+        .environmentObject(ThemeManager.shared)
+        .environmentObject(ChoreModel())
+}
