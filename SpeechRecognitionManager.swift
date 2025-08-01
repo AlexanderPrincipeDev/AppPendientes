@@ -210,9 +210,25 @@ class SpeechRecognitionManager: ObservableObject {
     func createTaskFromResult(_ result: TaskCreationResult, model: ChoreModel) {
         guard result.isValid else { return }
         
+        // Buscar la categoría correcta en el modelo basándose en el nombre detectado
+        var finalCategoryId: UUID? = nil
+        
+        if let detectedCategory = result.categoryId {
+            // Extraer el nombre de la categoría desde detectedCategory
+            if let tempCategory = TaskCategory.defaultCategories.first(where: { $0.id == detectedCategory }) {
+                // Buscar por nombre de categoría en las categorías del modelo
+                if let foundCategory = model.categories.first(where: { $0.name == tempCategory.name }) {
+                    finalCategoryId = foundCategory.id
+                    print("🔍 Categoría encontrada en modelo: \(foundCategory.name) con ID: \(foundCategory.id)")
+                } else {
+                    print("⚠️ Categoría '\(tempCategory.name)' no encontrada en el modelo, usando General")
+                }
+            }
+        }
+        
         let task = TaskItem(
             title: result.title,
-            categoryId: result.categoryId,
+            categoryId: finalCategoryId,
             hasReminder: result.hasReminder,
             reminderTime: result.reminderTime,
             repeatDaily: result.repeatDaily,
@@ -282,6 +298,7 @@ struct TaskCreationResult {
     let taskType: TaskItem.TaskType
     let confidence: Float
     let originalText: String
+    let isDateAutoAssigned: Bool
     
     var isValid: Bool {
         return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && confidence > 0.3
@@ -300,47 +317,25 @@ class TaskTextProcessor {
         let title = extractTaskTitle(from: text)
         
         // Extract date information
-        let (specificDate, taskType) = extractDateInfo(from: lowercasedText)
+        let (specificDate, taskType, isDateAutoAssigned) = extractDateInfo(from: lowercasedText)
         
         // Debug: Print detected date info
         if let date = specificDate {
             let formatter = DateFormatter()
             formatter.dateStyle = .medium
             formatter.locale = Locale(identifier: "es-ES")
-            print("🗓️ Fecha detectada: \(formatter.string(from: date)) para texto: '\(text)'")
-        } else {
-            print("🗓️ No se detectó fecha específica para: '\(text)' - Será tarea diaria")
+            if isDateAutoAssigned {
+                print("🗓️ Fecha asignada automáticamente (hoy): \(formatter.string(from: date)) para texto: '\(text)'")
+            } else {
+                print("🗓️ Fecha detectada explícitamente: \(formatter.string(from: date)) para texto: '\(text)'")
+            }
         }
         
         // Extract category information based on task content
         let detectedCategory = extractCategoryInfo(from: lowercasedText)
         
-        // Debug: Print detected category info
-        if let categoryId = detectedCategory?.id {
-            print("🏷️ Categoría detectada: \(categoryId) para texto: '\(text)'")
-        } else {
-            print("🏷️ No se detectó categoría para texto: '\(text)'")
-        }
-        
         // Extract time information for reminders
         let (hasReminder, reminderTime) = extractTimeInfo(from: lowercasedText, specificDate: specificDate)
-        
-        // Debug: Print reminder detection info
-        if hasReminder {
-            if let reminderTime = reminderTime {
-                let timeFormatter = DateFormatter()
-                timeFormatter.timeStyle = .short
-                timeFormatter.locale = Locale(identifier: "es-ES")
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateStyle = .medium
-                dateFormatter.locale = Locale(identifier: "es-ES")
-                print("⏰ RECORDATORIO DETECTADO: \(timeFormatter.string(from: reminderTime)) del \(dateFormatter.string(from: reminderTime))")
-            } else {
-                print("⏰ RECORDATORIO DETECTADO: Sin hora específica configurada")
-            }
-        } else {
-            print("⏰ No se detectó solicitud de recordatorio")
-        }
         
         // Extract repetition info
         let repeatDaily = extractRepetitionInfo(from: lowercasedText)
@@ -361,7 +356,8 @@ class TaskTextProcessor {
             specificDate: specificDate,
             taskType: taskType,
             confidence: confidence,
-            originalText: text
+            originalText: text,
+            isDateAutoAssigned: isDateAutoAssigned
         )
     }
     
@@ -434,121 +430,247 @@ class TaskTextProcessor {
         return cleanedText.capitalized
     }
     
-    private func extractDateInfo(from text: String) -> (Date?, TaskItem.TaskType) {
+    private func extractDateInfo(from text: String) -> (Date?, TaskItem.TaskType, Bool) {
         let today = Date()
         let cleanText = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Primero, verificar fechas exactas (ej: "10 de agosto", "15 de diciembre")
+        // Mejorar patrones de fechas exactas con más flexibilidad
         let monthNames = [
             "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
             "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
-            "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12
+            "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+            // Agregar abreviaciones y variaciones
+            "ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
+            "jul": 7, "ago": 8, "sep": 9, "oct": 10, "nov": 11, "dic": 12
         ]
         
-        // Patrón para fechas exactas: "día de mes" o "día del mes"
-        let exactDatePattern = "(\\d{1,2})\\s+de[l]?\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)"
-        
-        if let regex = try? NSRegularExpression(pattern: exactDatePattern, options: .caseInsensitive),
-           let match = regex.firstMatch(in: cleanText, range: NSRange(cleanText.startIndex..., in: cleanText)) {
-            
-            if let dayRange = Range(match.range(at: 1), in: cleanText),
-               let monthRange = Range(match.range(at: 2), in: cleanText),
-               let day = Int(String(cleanText[dayRange])),
-               let monthNumber = monthNames[String(cleanText[monthRange]).lowercased()] {
-                
-                let currentYear = calendar.component(.year, from: today)
-                let currentMonth = calendar.component(.month, from: today)
-                let currentDay = calendar.component(.day, from: today)
-                
-                // Determinar el año correcto
-                var targetYear = currentYear
-                
-                // Si el mes ya pasó este año, usar el próximo año
-                if monthNumber < currentMonth || (monthNumber == currentMonth && day < currentDay) {
-                    targetYear += 1
-                }
-                
-                if let exactDate = calendar.date(from: DateComponents(year: targetYear, month: monthNumber, day: day)) {
-                    print("📅 Fecha exacta detectada: \(day) de \(String(cleanText[monthRange])) del \(targetYear)")
-                    return (exactDate, .specific)
-                }
-            }
-        }
-        
-        // Verificar "hoy" con prioridad más alta y más variaciones
-        if cleanText.contains("hoy") || cleanText.contains("el día de hoy") || cleanText.contains("este día") {
-            return (today, .specific)
-        }
-        
-        // Verificar "esta mañana", "esta tarde", "esta noche" (también se refieren a hoy)
-        if cleanText.contains("esta mañana") || cleanText.contains("esta tarde") || cleanText.contains("esta noche") {
-            return (today, .specific)
-        }
-        
-        // Verificar "mañana" (día siguiente)
-        if cleanText.contains("mañana") && !cleanText.contains("esta mañana") {
-            let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)
-            return (tomorrow, .specific)
-        }
-        
-        // Verificar "pasado mañana"
-        if cleanText.contains("pasado mañana") {
-            let dayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: today)
-            return (dayAfterTomorrow, .specific)
-        }
-        
-        // Verificar días específicos de la semana
-        let dayPatterns = [
-            ("lunes", 2), ("martes", 3), ("miércoles", 4), ("jueves", 5),
-            ("viernes", 6), ("sábado", 7), ("domingo", 1)
+        // Patrones mejorados para fechas exactas
+        let exactDatePatterns = [
+            // Patrón básico: "día de mes" o "día del mes"
+            "(\\d{1,2})\\s+de[l]?\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)",
+            // Patrón con "el": "el día de mes"
+            "el\\s+(\\d{1,2})\\s+de[l]?\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)",
+            // Patrón formato numérico: "día/mes" o "día-mes"
+            "(\\d{1,2})[/\\-](\\d{1,2})",
+            // Patrón con "para el": "para el día de mes"
+            "para\\s+el\\s+(\\d{1,2})\\s+de[l]?\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)"
         ]
         
-        for (dayName, weekday) in dayPatterns {
-            if cleanText.contains(dayName) {
-                let currentWeekday = calendar.component(.weekday, from: today)
+        // Verificar fechas exactas con múltiples patrones
+        for pattern in exactDatePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+               let match = regex.firstMatch(in: cleanText, range: NSRange(cleanText.startIndex..., in: cleanText)) {
                 
-                // Si es el mismo día de la semana y dice "hoy", usar hoy
-                if weekday == currentWeekday && cleanText.contains("hoy") {
-                    return (today, .specific)
-                }
+                var day: Int?
+                var monthNumber: Int?
                 
-                // Si es el mismo día de la semana pero no dice "hoy", asumir la próxima semana
-                if weekday == currentWeekday && !cleanText.contains("hoy") {
-                    if let nextWeekDate = calendar.date(byAdding: .weekOfYear, value: 1, to: today) {
-                        if let nextDate = calendar.nextDate(
-                            after: nextWeekDate,
-                            matching: DateComponents(weekday: weekday),
-                            matchingPolicy: .previousTimePreservingSmallerComponents
-                        ) {
-                            return (nextDate, .specific)
-                        }
+                // Procesar según el patrón
+                if pattern.contains("\\d{1,2})[/\\-](\\d{1,2})") {
+                    // Formato numérico día/mes o día-mes
+                    if let dayRange = Range(match.range(at: 1), in: cleanText),
+                       let monthRange = Range(match.range(at: 2), in: cleanText) {
+                        day = Int(String(cleanText[dayRange]))
+                        monthNumber = Int(String(cleanText[monthRange]))
                     }
                 } else {
-                    // Buscar el próximo día con ese nombre
-                    if let nextDate = calendar.nextDate(
-                        after: today,
-                        matching: DateComponents(weekday: weekday),
-                        matchingPolicy: .nextTime
-                    ) {
-                        return (nextDate, .specific)
+                    // Formato con nombres de mes
+                    let dayIndex = pattern.contains("el\\s+") ? 2 : 1
+                    let monthIndex = dayIndex + 1
+                    
+                    if let dayRange = Range(match.range(at: dayIndex), in: cleanText),
+                       let monthRange = Range(match.range(at: monthIndex), in: cleanText) {
+                        day = Int(String(cleanText[dayRange]))
+                        monthNumber = monthNames[String(cleanText[monthRange]).lowercased()]
+                    }
+                }
+                
+                if let day = day, let monthNumber = monthNumber {
+                    let currentYear = calendar.component(.year, from: today)
+                    let currentMonth = calendar.component(.month, from: today)
+                    let currentDay = calendar.component(.day, from: today)
+                    
+                    // Validar día y mes
+                    guard monthNumber >= 1 && monthNumber <= 12 && day >= 1 && day <= 31 else {
+                        continue
+                    }
+                    
+                    // Determinar el año correcto
+                    var targetYear = currentYear
+                    
+                    // Si el mes ya pasó este año, usar el próximo año
+                    if monthNumber < currentMonth || (monthNumber == currentMonth && day < currentDay) {
+                        targetYear += 1
+                    }
+                    
+                    if let exactDate = calendar.date(from: DateComponents(year: targetYear, month: monthNumber, day: day)) {
+                        print("📅 Fecha exacta detectada: \(day)/\(monthNumber)/\(targetYear)")
+                        return (exactDate, .specific, false)
                     }
                 }
             }
         }
         
-        // Verificar referencias temporales relativas
-        if cleanText.contains("la próxima semana") || cleanText.contains("la siguiente semana") {
-            let nextWeek = calendar.date(byAdding: .weekOfYear, value: 1, to: today)
-            return (nextWeek, .specific)
+        // Patrones mejorados para referencias temporales específicas
+        let temporalPatterns = [
+            // Referencias a "hoy" - PRIORIDAD ALTA
+            ("\\b(hoy|el día de hoy|este día|ahora mismo|en este momento)\\b", "today"),
+            ("\\b(esta mañana|esta tarde|esta noche)\\b", "today"),
+            
+            // Referencias a "mañana" - con exclusión de "esta mañana"
+            ("\\bmañana\\b(?!.*\\besta\\b)", "tomorrow"),
+            ("\\b(el día de mañana|día siguiente)\\b", "tomorrow"),
+            
+            // Referencias a "pasado mañana"
+            ("\\b(pasado mañana|después de mañana|antier)\\b", "day_after_tomorrow"),
+            
+            // Referencias semanales más específicas
+            ("\\b(la próxima semana|la siguiente semana|semana que viene)\\b", "next_week"),
+            ("\\b(esta semana|en esta semana)\\b", "this_week"),
+            
+            // Referencias mensuales
+            ("\\b(el próximo mes|el siguiente mes|mes que viene)\\b", "next_month"),
+            ("\\b(este mes|en este mes)\\b", "this_month"),
+            
+            // Referencias a fin de semana
+            ("\\b(este fin de semana|el fin de semana)\\b", "this_weekend"),
+            ("\\b(el próximo fin de semana)\\b", "next_weekend")
+        ]
+        
+        // Verificar patrones temporales
+        for (pattern, timeRef) in temporalPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+               regex.firstMatch(in: cleanText, range: NSRange(cleanText.startIndex..., in: cleanText)) != nil {
+                
+                switch timeRef {
+                case "today":
+                    print("📅 Referencia a HOY detectada explícitamente")
+                    return (today, .specific, false)
+                    
+                case "tomorrow":
+                    if let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) {
+                        print("📅 Referencia a MAÑANA detectada")
+                        return (tomorrow, .specific, false)
+                    }
+                    
+                case "day_after_tomorrow":
+                    if let dayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: today) {
+                        print("📅 Referencia a PASADO MAÑANA detectada")
+                        return (dayAfterTomorrow, .specific, false)
+                    }
+                    
+                case "next_week":
+                    if let nextWeek = calendar.date(byAdding: .weekOfYear, value: 1, to: today) {
+                        print("📅 Referencia a PRÓXIMA SEMANA detectada")
+                        return (nextWeek, .specific, false)
+                    }
+                    
+                case "this_week":
+                    print("📅 Referencia a ESTA SEMANA detectada - usando hoy")
+                    return (today, .specific, false)
+                    
+                case "next_month":
+                    if let nextMonth = calendar.date(byAdding: .month, value: 1, to: today) {
+                        print("📅 Referencia a PRÓXIMO MES detectada")
+                        return (nextMonth, .specific, false)
+                    }
+                    
+                case "this_month":
+                    print("📅 Referencia a ESTE MES detectada - usando hoy")
+                    return (today, .specific, false)
+                    
+                case "this_weekend":
+                    if let saturday = calendar.nextDate(after: today, matching: DateComponents(weekday: 7), matchingPolicy: .nextTime) {
+                        print("📅 Referencia a ESTE FIN DE SEMANA detectada")
+                        return (saturday, .specific, false)
+                    }
+                    
+                case "next_weekend":
+                    if let nextSaturday = calendar.date(byAdding: .weekOfYear, value: 1, to: today),
+                       let saturday = calendar.nextDate(after: nextSaturday, matching: DateComponents(weekday: 7), matchingPolicy: .nextTime) {
+                        print("📅 Referencia a PRÓXIMO FIN DE SEMANA detectada")
+                        return (saturday, .specific, false)
+                    }
+                    
+                default:
+                    break
+                }
+            }
         }
         
-        if cleanText.contains("el próximo mes") || cleanText.contains("el siguiente mes") {
-            let nextMonth = calendar.date(byAdding: .month, value: 1, to: today)
-            return (nextMonth, .specific)
+        // Verificar días específicos de la semana con patrones mejorados
+        let dayPatterns = [
+            ("\\b(el )?lunes\\b", 2), ("\\b(el )?martes\\b", 3), ("\\b(el )?miércoles\\b", 4),
+            ("\\b(el )?jueves\\b", 5), ("\\b(el )?viernes\\b", 6), ("\\b(el )?sábado\\b", 7),
+            ("\\b(el )?domingo\\b", 1),
+            // Variaciones informales
+            ("\\blun\\b", 2), ("\\bmar\\b", 3), ("\\bmié\\b", 4), ("\\bjue\\b", 5),
+            ("\\bvie\\b", 6), ("\\bsáb\\b", 7), ("\\bdom\\b", 1)
+        ]
+        
+        for (dayPattern, weekday) in dayPatterns {
+            if let regex = try? NSRegularExpression(pattern: dayPattern, options: .caseInsensitive),
+               regex.firstMatch(in: cleanText, range: NSRange(cleanText.startIndex..., in: cleanText)) != nil {
+                
+                let currentWeekday = calendar.component(.weekday, from: today)
+                
+                // Si es el mismo día de la semana y contiene "hoy", usar hoy
+                if weekday == currentWeekday && cleanText.contains("hoy") {
+                    print("📅 Día de la semana actual con 'hoy' detectado")
+                    return (today, .specific, false)
+                }
+                
+                // Buscar el próximo día con ese nombre (incluyendo si es el mismo día pero futuro)
+                var searchDate = today
+                if weekday == currentWeekday {
+                    // Si es el mismo día pero no dice "hoy", asumir la próxima semana
+                    searchDate = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+                }
+                
+                if let nextDate = calendar.nextDate(
+                    after: searchDate,
+                    matching: DateComponents(weekday: weekday),
+                    matchingPolicy: .nextTime
+                ) {
+                    let dayName = getDayName(for: weekday)
+                    print("📅 Próximo \(dayName) detectado")
+                    return (nextDate, .specific, false)
+                }
+            }
         }
         
-        // Default to daily task if no specific date mentioned
-        return (nil, .daily)
+        // Verificar palabras clave que sugieren urgencia (asignar a hoy)
+        let urgencyKeywords = [
+            "urgente", "importante", "ahora", "inmediatamente", "ya", "pronto",
+            "cuanto antes", "lo antes posible", "rápido", "crítico", "prioritario"
+        ]
+        
+        let hasUrgency = urgencyKeywords.contains { keyword in
+            cleanText.contains(keyword.lowercased())
+        }
+        
+        if hasUrgency {
+            print("📅 Palabras de URGENCIA detectadas - asignando para HOY")
+            return (today, .specific, true)
+        }
+        
+        // Verificar patrones que sugieren tareas diarias
+        let dailyKeywords = [
+            "diario", "diariamente", "todos los días", "cada día", "rutina",
+            "habitual", "frecuente", "regular", "siempre", "constantemente"
+        ]
+        
+        let isDailyTask = dailyKeywords.contains { keyword in
+            cleanText.contains(keyword.lowercased())
+        }
+        
+        if isDailyTask {
+            print("📅 Tarea DIARIA detectada - asignando para HOY con repetición")
+            return (today, .daily, true)
+        }
+        
+        // Si no se detectó ninguna fecha específica, asignar HOY por defecto
+        print("📅 No se detectó fecha específica - asignando para HOY por defecto")
+        return (today, .specific, true)
     }
     
     private func extractTimeInfo(from text: String, specificDate: Date?) -> (Bool, Date?) {
@@ -799,6 +921,13 @@ class TaskTextProcessor {
         }
         
         return min(confidence, 1.0)
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func getDayName(for weekday: Int) -> String {
+        let dayNames = ["", "domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"]
+        return weekday >= 1 && weekday <= 7 ? dayNames[weekday] : "día"
     }
     
     // MARK: - Category Detection

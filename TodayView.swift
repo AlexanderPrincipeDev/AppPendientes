@@ -3,7 +3,6 @@ import SwiftUI
 struct TodayView: View {
     @EnvironmentObject var model: ChoreModel
     @State private var showingAddTask = false
-    @State private var showingVoiceTaskCreation = false
     @State private var scrollOffset: CGFloat = 0
     
     private var todayTasks: [TaskItem] {
@@ -104,39 +103,6 @@ struct TodayView: View {
                     // Trigger refresh animation
                 }
             }
-            .overlay(alignment: .bottomTrailing) {
-                // Floating voice button
-                VStack(spacing: 16) {
-                    // Voice task creation button
-                    Button(action: {
-                        HapticManager.shared.buttonPress()
-                        showingVoiceTaskCreation = true
-                    }) {
-                        Image(systemName: "mic.fill")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.white)
-                            .frame(width: 56, height: 56)
-                            .background(
-                                LinearGradient(
-                                    colors: [.purple, .blue],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                in: Circle()
-                            )
-                            .shadow(color: .purple.opacity(0.3), radius: 8, x: 0, y: 4)
-                    }
-                    .scaleEffect(showingVoiceTaskCreation ? 0.9 : 1.0)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingVoiceTaskCreation)
-                }
-                .padding(.trailing, 20)
-                .padding(.bottom, 20)
-            }
-        }
-        .sheet(isPresented: $showingVoiceTaskCreation) {
-            VoiceTaskCreationView()
-                .environmentObject(model)
         }
     }
 }
@@ -463,6 +429,29 @@ struct EnhancedTodayTaskRow: View {
         model.getCategoryForTask(task)
     }
     
+    private var categoryName: String {
+        if let category = category {
+            return category.name
+        }
+        return "General"
+    }
+    
+    private var categoryColor: Color {
+        if let category = category {
+            return category.swiftUIColor
+        }
+        // Color para la categoría "General" por defecto
+        return .gray
+    }
+    
+    private var categoryIcon: String {
+        if let category = category {
+            return category.icon
+        }
+        // Icono para la categoría "General" por defecto
+        return "star.fill"
+    }
+    
     var body: some View {
         HStack(spacing: 16) {
             // Enhanced completion button
@@ -518,28 +507,51 @@ struct EnhancedTodayTaskRow: View {
                     .multilineTextAlignment(.leading)
                 
                 HStack(spacing: 10) {
-                    if let category = category {
+                    // Categoría (siempre mostrar)
+                    HStack(spacing: 6) {
+                        Image(systemName: categoryIcon)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(categoryColor)
+                        
+                        Text(categoryName)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(categoryColor)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(categoryColor.opacity(0.1))
+                            .overlay(
+                                Capsule()
+                                    .stroke(categoryColor.opacity(0.3), lineWidth: 1)
+                            )
+                    )
+                    
+                    // Recordatorio (solo si tiene)
+                    if task.hasReminder, let reminderTime = task.reminderTime {
                         HStack(spacing: 6) {
-                            Image(systemName: category.icon)
+                            Image(systemName: "bell.fill")
                                 .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(category.swiftUIColor)
+                                .foregroundStyle(.orange)
                             
-                            Text(category.name)
+                            Text(reminderTime.formatted(date: .omitted, time: .shortened))
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(category.swiftUIColor)
+                                .foregroundStyle(.orange)
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .background(
                             Capsule()
-                                .fill(category.swiftUIColor.opacity(0.1))
+                                .fill(.orange.opacity(0.1))
                                 .overlay(
                                     Capsule()
-                                        .stroke(category.swiftUIColor.opacity(0.3), lineWidth: 1)
+                                        .stroke(.orange.opacity(0.3), lineWidth: 1)
                                 )
                         )
                     }
                     
+                    // Estado completada
                     if isCompleted {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.seal.fill")
