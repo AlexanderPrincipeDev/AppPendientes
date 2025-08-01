@@ -171,6 +171,16 @@ struct TaskCalendarDayView: View {
         calendar.isDateInToday(date)
     }
     
+    private var isPastDate: Bool {
+        let today = Date()
+        return calendar.compare(date, to: today, toGranularity: .day) == .orderedAscending
+    }
+    
+    private var canSelectDate: Bool {
+        // Permitir seleccionar hoy y fechas futuras, sin importar si están en el mes actual
+        return !isPastDate
+    }
+    
     private var tasksForDate: [TaskItem] {
         model.tasks.filter { task in
             if task.taskType == .specific, let specificDate = task.specificDate {
@@ -185,8 +195,10 @@ struct TaskCalendarDayView: View {
     }
     
     private var textColor: Color {
-        if !isInCurrentMonth {
-            return .secondary.opacity(0.5)
+        if !canSelectDate {
+            return .secondary.opacity(0.3) // Fechas pasadas muy atenuadas
+        } else if !isInCurrentMonth {
+            return .secondary.opacity(0.7) // Fechas de otros meses pero futuras
         } else if isToday {
             return .white
         } else {
@@ -230,12 +242,12 @@ struct TaskCalendarDayView: View {
                     .stroke(isToday ? .clear : .clear, lineWidth: 1)
             )
         }
-        .disabled(!isInCurrentMonth)
+        .disabled(!canSelectDate) // Solo deshabilitar fechas pasadas
         .buttonStyle(.plain)
     }
     
     private func dayTapped() {
-        guard isInCurrentMonth else { return }
+        guard canSelectDate else { return } // Permitir fechas futuras independientemente del mes
         selectedDate = date
     }
 }
