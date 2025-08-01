@@ -282,9 +282,9 @@ struct TaskProcessingResultView: View {
                 }
                 
                 TaskDetailRow(
-                    icon: "tag",
-                    label: "Tipo",
-                    value: result.taskType.displayName,
+                    icon: "folder",
+                    label: "Categoría",
+                    value: getCategoryName(for: result.categoryId),
                     isValid: true
                 )
                 
@@ -310,6 +310,17 @@ struct TaskProcessingResultView: View {
                         .stroke(result.isValid ? themeManager.themeColors.success.opacity(0.3) : themeManager.themeColors.warning.opacity(0.3), lineWidth: 2)
                 )
         )
+    }
+    
+    private func getCategoryName(for categoryId: UUID?) -> String {
+        guard let categoryId = categoryId else { return "General" }
+        
+        // Buscar la categoría en las categorías por defecto
+        if let category = TaskCategory.defaultCategories.first(where: { $0.id == categoryId }) {
+            return category.name
+        }
+        
+        return "General"
     }
 }
 

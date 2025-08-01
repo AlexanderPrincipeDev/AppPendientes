@@ -315,8 +315,32 @@ class TaskTextProcessor {
         // Extract category information based on task content
         let detectedCategory = extractCategoryInfo(from: lowercasedText)
         
+        // Debug: Print detected category info
+        if let categoryId = detectedCategory?.id {
+            print("🏷️ Categoría detectada: \(categoryId) para texto: '\(text)'")
+        } else {
+            print("🏷️ No se detectó categoría para texto: '\(text)'")
+        }
+        
         // Extract time information for reminders
         let (hasReminder, reminderTime) = extractTimeInfo(from: lowercasedText, specificDate: specificDate)
+        
+        // Debug: Print reminder detection info
+        if hasReminder {
+            if let reminderTime = reminderTime {
+                let timeFormatter = DateFormatter()
+                timeFormatter.timeStyle = .short
+                timeFormatter.locale = Locale(identifier: "es-ES")
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateStyle = .medium
+                dateFormatter.locale = Locale(identifier: "es-ES")
+                print("⏰ RECORDATORIO DETECTADO: \(timeFormatter.string(from: reminderTime)) del \(dateFormatter.string(from: reminderTime))")
+            } else {
+                print("⏰ RECORDATORIO DETECTADO: Sin hora específica configurada")
+            }
+        } else {
+            print("⏰ No se detectó solicitud de recordatorio")
+        }
         
         // Extract repetition info
         let repeatDaily = extractRepetitionInfo(from: lowercasedText)
