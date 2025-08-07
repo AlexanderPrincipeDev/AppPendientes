@@ -3,7 +3,7 @@ import Charts
 
 struct StatsView: View {
     @EnvironmentObject var model: ChoreModel
-    @State private var selectedTimeframe = StatsTimeframe.week
+    @State private var selectedTimeframe = TaskStatsTimeframe.week
     @State private var showingDetailedStats = false
     
     var body: some View {
@@ -51,7 +51,7 @@ struct StatsView: View {
 }
 
 // MARK: - Enums
-enum StatsTimeframe: String, CaseIterable {
+enum TaskStatsTimeframe: String, CaseIterable {
     case week = "7D"
     case month = "30D"
     case quarter = "90D"
@@ -239,11 +239,11 @@ struct StatsCard: View {
 
 // MARK: - Timeframe Picker
 struct TimeframePicker: View {
-    @Binding var selectedTimeframe: StatsTimeframe
+    @Binding var selectedTimeframe: TaskStatsTimeframe
     
     var body: some View {
         HStack(spacing: 12) {
-            ForEach(StatsTimeframe.allCases, id: \.self) { timeframe in
+            ForEach(TaskStatsTimeframe.allCases, id: \.self) { timeframe in
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         selectedTimeframe = timeframe
@@ -276,7 +276,7 @@ struct TimeframePicker: View {
 // MARK: - Main Chart Section
 struct MainChartSection: View {
     @EnvironmentObject var model: ChoreModel
-    let timeframe: StatsTimeframe
+    let timeframe: TaskStatsTimeframe
     
     private var chartData: [ChartDataPoint] {
         let calendar = Calendar.current
@@ -388,7 +388,7 @@ struct ChartDataPoint: Identifiable {
 // MARK: - Quick Insights Grid
 struct QuickInsightsGrid: View {
     @EnvironmentObject var model: ChoreModel
-    let timeframe: StatsTimeframe
+    let timeframe: TaskStatsTimeframe
     
     private var insights: [InsightData] {
         calculateInsights()
@@ -457,12 +457,12 @@ struct QuickInsightsGrid: View {
                 title: "Días Activos",
                 value: "\(activeDays)",
                 description: "de \(timeframe.days) días",
-                color: activeDays >= timeframe.days * 2/3 ? .green : .orange,
+                color: activeDays >= Int(Double(timeframe.days) * 2.0/3.0) ? .green : .orange,
                 icon: "chart.bar.fill"
             ),
             InsightData(
                 title: "Promedio Diario",
-                value: "\(activeDays > 0 ? completedTasks / activeDays : 0)",
+                value: "\(activeDays > 0 ? Int(Double(completedTasks) / Double(activeDays)) : 0)",
                 description: "tareas por día",
                 color: .blue,
                 icon: "calendar"
@@ -518,7 +518,7 @@ struct InsightCard: View {
 // MARK: - Category Analysis Section
 struct CategoryAnalysisSection: View {
     @EnvironmentObject var model: ChoreModel
-    let timeframe: StatsTimeframe
+    let timeframe: TaskStatsTimeframe
     
     private var categoryStats: [StatsCategoryStat] {
         calculateCategoryStats()
@@ -681,7 +681,7 @@ struct AchievementsSection: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(achievements) { achievement in
-                        AchievementCard(achievement: achievement)
+                        StatsAchievementCard(achievement: achievement)
                     }
                 }
                 .padding(.horizontal)
@@ -790,8 +790,8 @@ struct StatsAchievement: Identifiable {
     let isUnlocked: Bool
 }
 
-// MARK: - Achievement Card
-struct AchievementCard: View {
+// MARK: - Stats Achievement Card
+struct StatsAchievementCard: View {
     let achievement: StatsAchievement
     
     var body: some View {

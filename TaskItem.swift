@@ -10,13 +10,20 @@ struct TaskItem: Identifiable, Codable, Equatable, Hashable {
     var specificDate: Date? // Nueva propiedad para tareas específicas de fecha
     var taskType: TaskType // Nueva propiedad para distinguir tipo de tarea
     var sortOrder: Int = 0 // Propiedad para el orden de las tareas
+    var priority: TaskPriority = .medium // Nueva propiedad para prioridad
     
     enum TaskType: String, Codable, CaseIterable {
         case daily = "daily"
         case specific = "specific"
     }
+    
+    enum TaskPriority: String, Codable, CaseIterable {
+        case low = "Baja"
+        case medium = "Media"
+        case high = "Alta"
+    }
 
-    init(title: String, categoryId: UUID? = nil, hasReminder: Bool = false, reminderTime: Date? = nil, repeatDaily: Bool = true, specificDate: Date? = nil, taskType: TaskType = .daily) {
+    init(title: String, categoryId: UUID? = nil, hasReminder: Bool = false, reminderTime: Date? = nil, repeatDaily: Bool = true, specificDate: Date? = nil, taskType: TaskType = .daily, priority: TaskPriority = .medium) {
         self.id = UUID()
         self.title = title
         self.categoryId = categoryId
@@ -25,6 +32,7 @@ struct TaskItem: Identifiable, Codable, Equatable, Hashable {
         self.repeatDaily = repeatDaily
         self.specificDate = specificDate
         self.taskType = taskType
+        self.priority = priority
     }
     
     // Computed property para determinar si la tarea es para una fecha específica

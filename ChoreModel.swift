@@ -280,21 +280,53 @@ class ChoreModel: ObservableObject {
     }
 
     func toggle(taskId: UUID) {
-        let key = todayKey()
-        guard let rIndex = records.firstIndex(where: { $0.date == key }),
-              let sIndex = records[rIndex].statuses.firstIndex(where: { $0.taskId == taskId }) else { return }
+        guard let task = tasks.first(where: { $0.id == taskId }) else { return }
         
-        let wasCompleted = records[rIndex].statuses[sIndex].completed
-        records[rIndex].statuses[sIndex].completed.toggle()
+        // Determinar la fecha correcta para el registro
+        let dateKey: String
+        if task.taskType == .specific, let specificDate = task.specificDate {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            dateKey = formatter.string(from: specificDate)
+        } else {
+            dateKey = todayKey()
+        }
+        
+        // Buscar o crear el registro para la fecha correspondiente
+        let recordIndex: Int
+        if let existingIndex = records.firstIndex(where: { $0.date == dateKey }) {
+            recordIndex = existingIndex
+        } else {
+            // Crear nuevo registro para la fecha específica
+            let newRecord = DailyRecord(date: dateKey, statuses: [])
+            records.append(newRecord)
+            recordIndex = records.count - 1
+        }
+        
+        // Buscar o crear el estado de la tarea
+        let statusIndex: Int
+        if let existingStatusIndex = records[recordIndex].statuses.firstIndex(where: { $0.taskId == taskId }) {
+            statusIndex = existingStatusIndex
+        } else {
+            // Crear nuevo estado para la tarea
+            let newStatus = TaskStatus(taskId: taskId, completed: false, completedAt: nil)
+            records[recordIndex].statuses.append(newStatus)
+            statusIndex = records[recordIndex].statuses.count - 1
+        }
+        
+        let wasCompleted = records[recordIndex].statuses[statusIndex].completed
+        records[recordIndex].statuses[statusIndex].completed.toggle()
         
         // Add completion time if task is being completed
-        if !wasCompleted && records[rIndex].statuses[sIndex].completed {
-            records[rIndex].statuses[sIndex].completedAt = Date()
+        if !wasCompleted && records[recordIndex].statuses[statusIndex].completed {
+            records[recordIndex].statuses[statusIndex].completedAt = Date()
             // Award points for completing task
             gamification.addPoints(5)
             
-            // Check if all tasks are now completed
-            checkForDayCompletion()
+            // Check if all tasks are now completed (solo para el día de hoy)
+            if dateKey == todayKey() {
+                checkForDayCompletion()
+            }
         }
         
         saveRecords()

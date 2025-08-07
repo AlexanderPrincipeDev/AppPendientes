@@ -6,27 +6,24 @@ struct TodayView: View {
     @State private var scrollOffset: CGFloat = 0
     
     private var todayTasks: [TaskItem] {
-        let activeTaskIds = Set(model.todayRecord.statuses.map { $0.taskId })
-        let dailyTasks = model.tasks.filter { activeTaskIds.contains($0.id) }
-        
-        // Agregar tareas específicas para hoy
         let calendar = Calendar.current
-        let specificTasksForToday = model.tasks.filter { task in
-            if task.taskType == .specific, let specificDate = task.specificDate {
-                return calendar.isDateInToday(specificDate)
+        let today = calendar.startOfDay(for: Date())
+        
+        // Solo las tareas que realmente corresponden a HOY
+        let todayTasksOnly = model.tasks.filter { task in
+            // Para tareas diarias: verificar si están activas hoy
+            if task.taskType == .daily {
+                return model.isTaskActiveToday(task.id)
+            }
+            // Para tareas específicas: verificar si son exactamente para hoy
+            else if task.taskType == .specific, let specificDate = task.specificDate {
+                let taskDate = calendar.startOfDay(for: specificDate)
+                return taskDate == today
             }
             return false
         }
         
-        // Combinar ambos tipos de tareas, evitando duplicados
-        var allTasks = dailyTasks
-        for specificTask in specificTasksForToday {
-            if !allTasks.contains(where: { $0.id == specificTask.id }) {
-                allTasks.append(specificTask)
-            }
-        }
-        
-        return allTasks
+        return todayTasksOnly
     }
     
     private var completedTasks: [TaskItem] {
@@ -429,29 +426,6 @@ struct EnhancedTodayTaskRow: View {
         model.getCategoryForTask(task)
     }
     
-    private var categoryName: String {
-        if let category = category {
-            return category.name
-        }
-        return "General"
-    }
-    
-    private var categoryColor: Color {
-        if let category = category {
-            return category.swiftUIColor
-        }
-        // Color para la categoría "General" por defecto
-        return .gray
-    }
-    
-    private var categoryIcon: String {
-        if let category = category {
-            return category.icon
-        }
-        // Icono para la categoría "General" por defecto
-        return "star.fill"
-    }
-    
     var body: some View {
         HStack(spacing: 16) {
             // Enhanced completion button
@@ -507,51 +481,28 @@ struct EnhancedTodayTaskRow: View {
                     .multilineTextAlignment(.leading)
                 
                 HStack(spacing: 10) {
-                    // Categoría (siempre mostrar)
-                    HStack(spacing: 6) {
-                        Image(systemName: categoryIcon)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(categoryColor)
-                        
-                        Text(categoryName)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(categoryColor)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(categoryColor.opacity(0.1))
-                            .overlay(
-                                Capsule()
-                                    .stroke(categoryColor.opacity(0.3), lineWidth: 1)
-                            )
-                    )
-                    
-                    // Recordatorio (solo si tiene)
-                    if task.hasReminder, let reminderTime = task.reminderTime {
+                    if let category = category {
                         HStack(spacing: 6) {
-                            Image(systemName: "bell.fill")
+                            Image(systemName: category.icon)
                                 .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(category.swiftUIColor)
                             
-                            Text(reminderTime.formatted(date: .omitted, time: .shortened))
+                            Text(category.name)
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(category.swiftUIColor)
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .background(
                             Capsule()
-                                .fill(.orange.opacity(0.1))
+                                .fill(category.swiftUIColor.opacity(0.1))
                                 .overlay(
                                     Capsule()
-                                        .stroke(.orange.opacity(0.3), lineWidth: 1)
+                                        .stroke(category.swiftUIColor.opacity(0.3), lineWidth: 1)
                                 )
                         )
                     }
                     
-                    // Estado completada
                     if isCompleted {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.seal.fill")
