@@ -20,21 +20,9 @@ struct ContentView: View {
 
             HabitsView()
                 .tabItem {
-                    Label("Hábitos", systemImage: "heart.text.square.fill")
+                    Label("Hábitos", systemImage: "repeat.circle.fill")
                 }
                 .tag(2)
-
-            StatsView()
-                .tabItem {
-                    Label("Estadísticas", systemImage: "chart.bar.fill")
-                }
-                .tag(3)
-                
-            HistoryView()
-                .tabItem {
-                    Label("Historial", systemImage: "calendar")
-                }
-                .tag(4)
         }
         .environmentObject(model)
         .accentColor(.blue)
